@@ -14,17 +14,26 @@ const optionalEnv = (name) => {
 };
 
 const connectionString = optionalEnv("DATABASE_URL");
-const pool = new pg.Pool(
-  connectionString
-    ? { connectionString }
-    : {
-        user: requiredEnv("POSTGRES_USERNAME"),
-        password: requiredEnv("POSTGRES_PASSWORD"),
-        host: requiredEnv("POSTGRES_HOST"),
-        port: Number(optionalEnv("POSTGRES_PORT") ?? "5432"),
-        database: requiredEnv("POSTGRES_DATABASE"),
-      },
-);
+const connectionConfig = connectionString
+  ? { connectionString }
+  : {
+      user: requiredEnv("POSTGRES_USERNAME"),
+      password: requiredEnv("POSTGRES_PASSWORD"),
+      host: requiredEnv("POSTGRES_HOST"),
+      port: Number(optionalEnv("POSTGRES_PORT") ?? "5432"),
+      database: requiredEnv("POSTGRES_DATABASE"),
+    };
+
+if ("connectionString" in connectionConfig) {
+  const url = new URL(connectionConfig.connectionString);
+  console.log(`Running database migrations using DATABASE_URL host=${url.hostname} port=${url.port || "5432"}`);
+} else {
+  console.log(
+    `Running database migrations using POSTGRES_* host=${connectionConfig.host} port=${connectionConfig.port} database=${connectionConfig.database}`,
+  );
+}
+
+const pool = new pg.Pool(connectionConfig);
 const db = drizzle(pool);
 
 try {
