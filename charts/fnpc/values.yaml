@@ -9,7 +9,7 @@ env:
   port: "4111"
   mastraAutoDetectUrl: "true"
   mastraHideCloudCta: "true"
-  telegramAdapterMode: polling
+  telegramAdapterMode: webhook
   aiModel: claude-sonnet-4-6
   auth:
     baseUrl: https://auth.nezdemkovski.cloud/api/fnpc-studio/auth
