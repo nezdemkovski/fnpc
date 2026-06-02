@@ -16,6 +16,7 @@ secret:
 onepassword:
   appItem: fnpc
   postgresItem: fnpc-postgres
+  clickhouseItem: fnpc-clickhouse
 
 postgres:
   enabled: true
@@ -29,17 +30,30 @@ postgres:
 
 clickhouse:
   enabled: true
-  url: http://plausible-clickhouse.plausible.svc.cluster.local:8123/fnpc
-  host: plausible-clickhouse.plausible.svc.cluster.local
-  nativePort: "9000"
+  name: fnpc-clickhouse
+  image:
+    repository: clickhouse/clickhouse-server
+    tag: "25.11.1.558-alpine"
+    pullPolicy: IfNotPresent
+  url: http://fnpc-clickhouse.fnpc.svc.cluster.local:8123/fnpc
   database: fnpc
   username: fnpc
-  passwordProperty: CLICKHOUSE_PASSWORD
-  admin:
-    onepasswordItem: plausible
-    passwordProperty: CLICKHOUSE_PASSWORD
-  provisioner:
-    image: docker.io/bitnamilegacy/clickhouse:24.12.3-debian-12-r1
+  secretName: fnpc-clickhouse
+  storage:
+    storageClass: local-path
+    size: 10Gi
+  resources:
+    requests:
+      cpu: 250m
+      memory: 1Gi
+    limits:
+      memory: 2Gi
+  readinessProbe:
+    initialDelaySeconds: 20
+    periodSeconds: 10
+  livenessProbe:
+    initialDelaySeconds: 60
+    periodSeconds: 30
 
 service:
   type: ClusterIP

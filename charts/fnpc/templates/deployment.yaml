@@ -48,12 +48,15 @@ spec:
             - name: CLICKHOUSE_URL
               value: {{ .Values.clickhouse.url | quote }}
             - name: CLICKHOUSE_USERNAME
-              value: {{ .Values.clickhouse.username | quote }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.clickhouse.secretName }}
+                  key: username
             - name: CLICKHOUSE_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.secret.name }}
-                  key: CLICKHOUSE_PASSWORD
+                  name: {{ .Values.clickhouse.secretName }}
+                  key: password
             {{- end }}
           ports:
             - name: http

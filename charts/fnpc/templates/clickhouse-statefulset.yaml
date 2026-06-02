@@ -1,0 +1,75 @@
+{{- if .Values.clickhouse.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Values.clickhouse.name }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  labels:
+    {{- include "fnpc.labels" . | nindent 4 }}
+    app.kubernetes.io/component: clickhouse
+spec:
+  serviceName: {{ .Values.clickhouse.name }}
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "fnpc.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: clickhouse
+  template:
+    metadata:
+      labels:
+        {{- include "fnpc.labels" . | nindent 8 }}
+        app.kubernetes.io/component: clickhouse
+    spec:
+      containers:
+        - name: clickhouse
+          image: "{{ .Values.clickhouse.image.repository }}:{{ .Values.clickhouse.image.tag }}"
+          imagePullPolicy: {{ .Values.clickhouse.image.pullPolicy }}
+          env:
+            - name: CLICKHOUSE_DB
+              value: {{ .Values.clickhouse.database | quote }}
+            - name: CLICKHOUSE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.clickhouse.secretName }}
+                  key: username
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.clickhouse.secretName }}
+                  key: password
+            - name: CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT
+              value: "1"
+          ports:
+            - name: http
+              containerPort: 8123
+            - name: native
+              containerPort: 9000
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            initialDelaySeconds: {{ .Values.clickhouse.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.clickhouse.readinessProbe.periodSeconds }}
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            initialDelaySeconds: {{ .Values.clickhouse.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.clickhouse.livenessProbe.periodSeconds }}
+          resources:
+            {{- toYaml .Values.clickhouse.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/clickhouse
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: {{ .Values.clickhouse.storage.storageClass | quote }}
+        resources:
+          requests:
+            storage: {{ .Values.clickhouse.storage.size | quote }}
+{{- end }}

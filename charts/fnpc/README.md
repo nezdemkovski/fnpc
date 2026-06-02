@@ -12,7 +12,6 @@ This chart deploys the FNPC Mastra service with:
 
 - `ANTHROPIC_API_KEY`
 - `TELEGRAM_BOT_TOKEN`
-- `CLICKHOUSE_PASSWORD`
 
 `fnpc-postgres`
 
@@ -20,14 +19,14 @@ This chart deploys the FNPC Mastra service with:
 - `username`
 - `password`
 
-`plausible`
+`fnpc-clickhouse`
 
-- `CLICKHOUSE_PASSWORD`
+- `username`
+- `password`
 
 ## ClickHouse
 
-The chart expects the existing homelab ClickHouse service to be reachable at:
-
-`plausible-clickhouse.plausible.svc.cluster.local`
-
-When ClickHouse is enabled, a sync job creates the `fnpc` database and `fnpc` user, then grants that user rights on `fnpc.*`. Mastra receives `CLICKHOUSE_URL`, `CLICKHOUSE_USERNAME`, and `CLICKHOUSE_PASSWORD`; Postgres remains the default storage backend, while ClickHouse is used only for observability.
+When ClickHouse is enabled, the chart deploys a dedicated `fnpc-clickhouse`
+StatefulSet and PVC in the `fnpc` namespace. Mastra receives `CLICKHOUSE_URL`,
+`CLICKHOUSE_USERNAME`, and `CLICKHOUSE_PASSWORD`; Postgres remains the default
+storage backend, while ClickHouse is used only for observability.
