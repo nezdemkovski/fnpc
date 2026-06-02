@@ -2,11 +2,13 @@ replicaCount: 1
 
 image:
   repository: ghcr.io/nezdemkovski/fnpc
-  tag: "0.1.3"
+  tag: "0.1.4"
   pullPolicy: IfNotPresent
 
 env:
   port: "4111"
+  mastraAutoDetectUrl: "true"
+  mastraHideCloudCta: "true"
   telegramAdapterMode: polling
   aiModel: claude-sonnet-4-6
   auth:

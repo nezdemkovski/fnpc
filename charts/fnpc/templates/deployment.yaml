@@ -27,6 +27,10 @@ spec:
           env:
             - name: PORT
               value: {{ .Values.env.port | quote }}
+            - name: MASTRA_AUTO_DETECT_URL
+              value: {{ .Values.env.mastraAutoDetectUrl | quote }}
+            - name: MASTRA_HIDE_CLOUD_CTA
+              value: {{ .Values.env.mastraHideCloudCta | quote }}
             - name: TELEGRAM_ADAPTER_MODE
               value: {{ .Values.env.telegramAdapterMode | quote }}
             - name: AI_MODEL
