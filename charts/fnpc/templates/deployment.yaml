@@ -6,6 +6,7 @@ metadata:
     argocd.argoproj.io/sync-wave: "3"
   labels:
     {{- include "fnpc.labels" . | nindent 4 }}
+    app.kubernetes.io/component: app
 spec:
   replicas: {{ .Values.replicaCount }}
   strategy:
@@ -13,10 +14,12 @@ spec:
   selector:
     matchLabels:
       {{- include "fnpc.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: app
   template:
     metadata:
       labels:
         {{- include "fnpc.labels" . | nindent 8 }}
+        app.kubernetes.io/component: app
     spec:
       containers:
         - name: fnpc
