@@ -2,7 +2,7 @@ replicaCount: 1
 
 image:
   repository: ghcr.io/nezdemkovski/fnpc
-  tag: "0.1.5"
+  tag: "0.1.6"
   pullPolicy: IfNotPresent
 
 env:
@@ -16,6 +16,9 @@ env:
     jwksUrl: https://auth.nezdemkovski.cloud/api/fnpc-studio/auth/.well-known/jwks.json
     jwtIssuer: https://auth.nezdemkovski.cloud/api/fnpc-studio
     jwtAudience: fnpc-studio,https://auth.nezdemkovski.cloud/api/fnpc-studio
+
+migrations:
+  enabled: true
 
 secret:
   name: fnpc-env

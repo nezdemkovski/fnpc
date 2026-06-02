@@ -17,6 +17,8 @@ ENV MASTRA_HIDE_CLOUD_CTA=true
 WORKDIR /app
 
 COPY --from=build /app/.mastra/output ./
+COPY --from=build /app/drizzle ./drizzle
+COPY --from=build /app/scripts/migrate.mjs ./migrate.mjs
 
 EXPOSE 4111
 
