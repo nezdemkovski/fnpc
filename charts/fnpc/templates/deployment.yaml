@@ -31,6 +31,21 @@ spec:
               value: {{ .Values.env.telegramAdapterMode | quote }}
             - name: AI_MODEL
               value: {{ .Values.env.aiModel | quote }}
+            {{- with .Values.env.auth }}
+            - name: AUTH_BASE_URL
+              value: {{ .baseUrl | quote }}
+            - name: AUTH_JWKS_URL
+              value: {{ .jwksUrl | quote }}
+            - name: AUTH_JWT_ISSUER
+              value: {{ .jwtIssuer | quote }}
+            - name: AUTH_JWT_AUDIENCE
+              value: {{ .jwtAudience | quote }}
+            - name: AUTH_SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Values.secret.name }}
+                  key: AUTH_SESSION_SECRET
+            {{- end }}
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:

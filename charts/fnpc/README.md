@@ -12,6 +12,7 @@ This chart deploys the FNPC Mastra service with:
 
 - `ANTHROPIC_API_KEY`
 - `TELEGRAM_BOT_TOKEN`
+- `AUTH_SESSION_SECRET`
 
 `fnpc-postgres`
 

@@ -9,6 +9,11 @@ env:
   port: "4111"
   telegramAdapterMode: polling
   aiModel: claude-sonnet-4-6
+  auth:
+    baseUrl: https://auth.nezdemkovski.cloud/api/fnpc-studio/auth
+    jwksUrl: https://auth.nezdemkovski.cloud/api/fnpc-studio/auth/.well-known/jwks.json
+    jwtIssuer: https://auth.nezdemkovski.cloud/api/fnpc-studio
+    jwtAudience: fnpc-studio,https://auth.nezdemkovski.cloud/api/fnpc-studio
 
 secret:
   name: fnpc-env

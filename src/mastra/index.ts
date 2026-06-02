@@ -10,6 +10,7 @@ import { generateFinancialReport } from "./workflows/generate-financial-report";
 import { mutatePlannedExpense } from "./workflows/mutate-planned-expense";
 import { mutateSavingsPlan } from "./workflows/mutate-savings-plan";
 import { updateFinancialProfile } from "./workflows/update-financial-profile";
+import { createSharedAuthProvider } from "./auth/shared-auth-provider";
 
 const postgresStorage = new PostgresStore({
   id: "fnpc-mastra-storage",
@@ -43,4 +44,9 @@ export const mastra = new Mastra({
       },
     },
   }),
+  server: env.studioAuth
+    ? {
+        auth: createSharedAuthProvider(env.studioAuth),
+      }
+    : undefined,
 });
