@@ -4,6 +4,24 @@ const requiredEnv = (name: string): string => {
   return value;
 };
 
+const optionalEnv = (name: string): string | undefined => {
+  const value = process.env[name];
+  return value && value.length > 0 ? value : undefined;
+};
+
+const databaseUrl = (): string => {
+  const explicitUrl = optionalEnv("DATABASE_URL");
+  if (explicitUrl) return explicitUrl;
+
+  const username = encodeURIComponent(requiredEnv("POSTGRES_USERNAME"));
+  const password = encodeURIComponent(requiredEnv("POSTGRES_PASSWORD"));
+  const host = requiredEnv("POSTGRES_HOST");
+  const port = optionalEnv("POSTGRES_PORT") ?? "5432";
+  const database = encodeURIComponent(requiredEnv("POSTGRES_DATABASE"));
+
+  return `postgresql://${username}:${password}@${host}:${port}/${database}`;
+};
+
 const normalizeMastraModel = (model: string): string => {
   if (model.includes("/")) return model;
   return `anthropic/${model}`;
@@ -42,7 +60,7 @@ const optionalStudioAuthConfig = () => {
 };
 
 export const env = {
-  databaseUrl: requiredEnv("DATABASE_URL"),
+  databaseUrl: databaseUrl(),
   model: normalizeMastraModel(process.env.AI_MODEL ?? "claude-sonnet-4-5"),
   telegramAdapterMode: telegramAdapterMode(process.env.TELEGRAM_ADAPTER_MODE),
   clickhouse: optionalClickhouseConfig(),

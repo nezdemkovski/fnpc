@@ -39,8 +39,12 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.postgres.clusterName }}-owner
                   key: password
-            - name: DATABASE_URL
-              value: "postgresql://$(POSTGRES_USERNAME):$(POSTGRES_PASSWORD)@{{ .Values.postgres.clusterName }}-rw.{{ .Release.Namespace }}.svc.cluster.local:5432/{{ .Values.postgres.database }}"
+            - name: POSTGRES_HOST
+              value: "{{ .Values.postgres.clusterName }}-rw.{{ .Release.Namespace }}.svc.cluster.local"
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: POSTGRES_DATABASE
+              value: {{ .Values.postgres.database | quote }}
       {{- end }}
       containers:
         - name: fnpc
@@ -82,8 +86,12 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.postgres.clusterName }}-owner
                   key: password
-            - name: DATABASE_URL
-              value: "postgresql://$(POSTGRES_USERNAME):$(POSTGRES_PASSWORD)@{{ .Values.postgres.clusterName }}-rw.{{ .Release.Namespace }}.svc.cluster.local:5432/{{ .Values.postgres.database }}"
+            - name: POSTGRES_HOST
+              value: "{{ .Values.postgres.clusterName }}-rw.{{ .Release.Namespace }}.svc.cluster.local"
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: POSTGRES_DATABASE
+              value: {{ .Values.postgres.database | quote }}
             - name: ANTHROPIC_API_KEY
               valueFrom:
                 secretKeyRef:
