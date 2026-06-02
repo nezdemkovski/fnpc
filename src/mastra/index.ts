@@ -14,7 +14,7 @@ import { createSharedAuthProvider } from "./auth/shared-auth-provider";
 
 const postgresStorage = new PostgresStore({
   id: "fnpc-mastra-storage",
-  connectionString: env.databaseUrl,
+  ...env.postgresConnection,
 });
 
 const storage = env.clickhouse

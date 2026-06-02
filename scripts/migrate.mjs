@@ -13,19 +13,18 @@ const optionalEnv = (name) => {
   return value && value.length > 0 ? value : undefined;
 };
 
-const databaseUrl =
-  optionalEnv("DATABASE_URL") ??
-  `postgresql://${encodeURIComponent(requiredEnv("POSTGRES_USERNAME"))}:${encodeURIComponent(
-    requiredEnv("POSTGRES_PASSWORD"),
-  )}@${requiredEnv("POSTGRES_HOST")}:${optionalEnv("POSTGRES_PORT") ?? "5432"}/${encodeURIComponent(
-    requiredEnv("POSTGRES_DATABASE"),
-  )}`;
-
-if (!databaseUrl) {
-  throw new Error("Database connection settings are required to run database migrations");
-}
-
-const pool = new pg.Pool({ connectionString: databaseUrl });
+const connectionString = optionalEnv("DATABASE_URL");
+const pool = new pg.Pool(
+  connectionString
+    ? { connectionString }
+    : {
+        user: requiredEnv("POSTGRES_USERNAME"),
+        password: requiredEnv("POSTGRES_PASSWORD"),
+        host: requiredEnv("POSTGRES_HOST"),
+        port: Number(optionalEnv("POSTGRES_PORT") ?? "5432"),
+        database: requiredEnv("POSTGRES_DATABASE"),
+      },
+);
 const db = drizzle(pool);
 
 try {

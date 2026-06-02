@@ -9,17 +9,17 @@ const optionalEnv = (name: string): string | undefined => {
   return value && value.length > 0 ? value : undefined;
 };
 
-const databaseUrl = (): string => {
+const postgresConnection = () => {
   const explicitUrl = optionalEnv("DATABASE_URL");
-  if (explicitUrl) return explicitUrl;
+  if (explicitUrl) return { connectionString: explicitUrl };
 
-  const username = encodeURIComponent(requiredEnv("POSTGRES_USERNAME"));
-  const password = encodeURIComponent(requiredEnv("POSTGRES_PASSWORD"));
-  const host = requiredEnv("POSTGRES_HOST");
-  const port = optionalEnv("POSTGRES_PORT") ?? "5432";
-  const database = encodeURIComponent(requiredEnv("POSTGRES_DATABASE"));
-
-  return `postgresql://${username}:${password}@${host}:${port}/${database}`;
+  return {
+    user: requiredEnv("POSTGRES_USERNAME"),
+    password: requiredEnv("POSTGRES_PASSWORD"),
+    host: requiredEnv("POSTGRES_HOST"),
+    port: Number(optionalEnv("POSTGRES_PORT") ?? "5432"),
+    database: requiredEnv("POSTGRES_DATABASE"),
+  };
 };
 
 const normalizeMastraModel = (model: string): string => {
@@ -60,7 +60,7 @@ const optionalStudioAuthConfig = () => {
 };
 
 export const env = {
-  databaseUrl: databaseUrl(),
+  postgresConnection: postgresConnection(),
   model: normalizeMastraModel(process.env.AI_MODEL ?? "claude-sonnet-4-5"),
   telegramAdapterMode: telegramAdapterMode(process.env.TELEGRAM_ADAPTER_MODE),
   clickhouse: optionalClickhouseConfig(),
