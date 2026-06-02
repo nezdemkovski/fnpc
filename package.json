@@ -1,0 +1,43 @@
+{
+  "name": "fnpc",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "mastra dev",
+    "build": "mastra build",
+    "start": "mastra start",
+    "typecheck": "tsc --noEmit",
+    "eval:seed-datasets": "bun --env-file .env scripts/seed-eval-datasets.ts",
+    "eval:audit-datasets": "bun --env-file .env scripts/audit-eval-datasets.ts",
+    "eval:run-workflows": "bun --env-file .env scripts/run-eval-datasets.ts",
+    "eval:run-agents": "bun --env-file .env scripts/run-eval-datasets.ts --target=agent",
+    "eval:run-all": "bun --env-file .env scripts/run-eval-datasets.ts --target=all",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "@chat-adapter/telegram": "^4.30.0",
+    "@date-fns/tz": "^1.5.0",
+    "@mastra/clickhouse": "^1.9.0",
+    "@mastra/core": "latest",
+    "@mastra/hono": "latest",
+    "@mastra/memory": "latest",
+    "@mastra/observability": "^1.14.0",
+    "@mastra/pg": "^1.11.1",
+    "date-fns": "^4.4.0",
+    "drizzle-orm": "^1.0.0-beta.22",
+    "hono": "latest",
+    "pg": "^8.21.0",
+    "zod": "latest"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "^25.9.1",
+    "drizzle-kit": "^1.0.0-beta.22",
+    "mastra": "^1.10.2",
+    "typescript": "latest"
+  }
+}

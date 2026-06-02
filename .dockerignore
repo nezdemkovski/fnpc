@@ -1,0 +1,11 @@
+.git
+.github
+.mastra
+node_modules
+dist
+coverage
+.env
+.env.*
+docker-compose.yml
+charts
+README.md

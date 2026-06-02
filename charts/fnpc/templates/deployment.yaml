@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "fnpc.fullname" . }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+  labels:
+    {{- include "fnpc.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "fnpc.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "fnpc.labels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: fnpc
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: PORT
+              value: {{ .Values.env.port | quote }}
+            - name: TELEGRAM_ADAPTER_MODE
+              value: {{ .Values.env.telegramAdapterMode | quote }}
+            - name: AI_MODEL
+              value: {{ .Values.env.aiModel | quote }}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secret.name }}
+                  key: DATABASE_URL
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secret.name }}
+                  key: ANTHROPIC_API_KEY
+            - name: TELEGRAM_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secret.name }}
+                  key: TELEGRAM_BOT_TOKEN
+            {{- if .Values.clickhouse.enabled }}
+            - name: CLICKHOUSE_URL
+              value: {{ .Values.clickhouse.url | quote }}
+            - name: CLICKHOUSE_USERNAME
+              value: {{ .Values.clickhouse.username | quote }}
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secret.name }}
+                  key: CLICKHOUSE_PASSWORD
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.targetPort }}
+          readinessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}

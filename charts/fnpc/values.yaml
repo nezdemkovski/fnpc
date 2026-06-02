@@ -1,0 +1,62 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/nezdemkovski/fnpc
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+env:
+  port: "4111"
+  telegramAdapterMode: polling
+  aiModel: claude-sonnet-4-6
+
+secret:
+  name: fnpc-env
+
+onepassword:
+  appItem: fnpc
+  postgresItem: fnpc-postgres
+
+postgres:
+  enabled: true
+  clusterName: fnpc-postgres
+  database: fnpc
+  owner: fnpc
+  imageName: ghcr.io/cloudnative-pg/postgresql:17.10-system-trixie
+  storage:
+    storageClass: local-path
+    size: 5Gi
+
+clickhouse:
+  enabled: true
+  url: http://plausible-clickhouse.plausible.svc.cluster.local:8123/fnpc
+  host: plausible-clickhouse.plausible.svc.cluster.local
+  nativePort: "9000"
+  database: fnpc
+  username: fnpc
+  passwordProperty: CLICKHOUSE_PASSWORD
+  admin:
+    onepasswordItem: plausible
+    passwordProperty: CLICKHOUSE_PASSWORD
+  provisioner:
+    image: docker.io/bitnamilegacy/clickhouse:24.12.3-debian-12-r1
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 4111
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 512Mi
+  limits:
+    memory: 2Gi
+
+readinessProbe:
+  initialDelaySeconds: 20
+  periodSeconds: 10
+
+livenessProbe:
+  initialDelaySeconds: 60
+  periodSeconds: 30
