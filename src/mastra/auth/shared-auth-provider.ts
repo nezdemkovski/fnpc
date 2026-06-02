@@ -29,6 +29,8 @@ export class SharedAuthProvider
   extends MastraAuthProvider<SharedAuthUser>
   implements ISSOProvider<SharedAuthUser>, ISessionProvider<SharedAuthSession>
 {
+  readonly isSimpleAuth = true;
+
   private readonly authOrigin: string;
   private readonly project: string;
   private readonly jwks: ReturnType<typeof createRemoteJWKSet>;
