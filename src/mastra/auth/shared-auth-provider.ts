@@ -20,6 +20,12 @@ type SharedAuthSession = Session & {
   authCookie: string;
 };
 
+type AuthFlow = {
+  redirectUri: string;
+  state: string;
+  stateId: string;
+};
+
 const MASTRA_SESSION_COOKIE = "mastra-token";
 const AUTH_FLOW_COOKIE = "fnpc-auth-flow";
 const SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
@@ -72,7 +78,7 @@ export class SharedAuthProvider
     return [
       this.cookie(
         AUTH_FLOW_COOKIE,
-        this.seal({ redirectUri, state }),
+        this.seal({ redirectUri, state, stateId: this.stateId(state) }),
         FLOW_MAX_AGE_SECONDS,
       ),
     ];
@@ -83,10 +89,10 @@ export class SharedAuthProvider
   }
 
   async handleCallback(code: string, state: string) {
-    const flow = this.unseal<{ redirectUri: string; state: string }>(
+    const flow = this.unseal<AuthFlow>(
       parseCookie(this.callbackCookieHeader).get(AUTH_FLOW_COOKIE) ?? "",
     );
-    if (!flow || flow.state !== state) {
+    if (!flow || flow.stateId !== state) {
       throw new Error("Invalid auth flow");
     }
 
@@ -96,7 +102,7 @@ export class SharedAuthProvider
       body: JSON.stringify({
         code,
         redirect_uri: flow.redirectUri,
-        code_verifier: this.pkceVerifier(flow.redirectUri, state),
+        code_verifier: this.pkceVerifier(flow.redirectUri, flow.state),
       }),
     });
 
@@ -139,9 +145,10 @@ export class SharedAuthProvider
     const bearerUser = await this.verifyJwtOrNull(token);
     if (bearerUser) return bearerUser;
 
+    const cookieHeader = requestHeader(request, "cookie");
     const sessionCookie =
       token ||
-      parseCookie(request.header("cookie") ?? "").get(MASTRA_SESSION_COOKIE) ||
+      parseCookie(cookieHeader).get(MASTRA_SESSION_COOKIE) ||
       "";
     const session = await this.validateSession(sessionCookie);
     if (!session) return null;
@@ -318,6 +325,10 @@ export class SharedAuthProvider
       .digest("base64url");
   }
 
+  private stateId(state: string) {
+    return state.split("|", 1)[0] ?? state;
+  }
+
   private key() {
     return createHash("sha256").update(this.config.sessionSecret).digest();
   }
@@ -375,4 +386,14 @@ const parseCookie = (header: string) => {
     result.set(name, decodeURIComponent(value.join("=")));
   }
   return result;
+};
+
+const requestHeader = (request: HonoRequest | Request, name: string) => {
+  if ("header" in request && typeof request.header === "function") {
+    return request.header(name) ?? "";
+  }
+  if ("headers" in request && typeof request.headers?.get === "function") {
+    return request.headers.get(name) ?? "";
+  }
+  return "";
 };
