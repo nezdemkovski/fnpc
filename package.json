@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "mastra dev",
-    "build": "mastra build",
+    "build": "mastra build --studio",
     "start": "mastra start",
     "typecheck": "tsc --noEmit",
     "eval:seed-datasets": "bun --env-file .env scripts/seed-eval-datasets.ts",
