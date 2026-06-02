@@ -16,7 +16,6 @@ This chart deploys the FNPC Mastra service with:
 
 `fnpc-postgres`
 
-- `DATABASE_URL`
 - `username`
 - `password`
 

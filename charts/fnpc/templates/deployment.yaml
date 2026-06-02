@@ -29,11 +29,18 @@ spec:
             - node
             - /app/migrate.mjs
           env:
-            - name: DATABASE_URL
+            - name: POSTGRES_USERNAME
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.secret.name }}
-                  key: DATABASE_URL
+                  name: {{ .Values.postgres.clusterName }}-owner
+                  key: username
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.clusterName }}-owner
+                  key: password
+            - name: DATABASE_URL
+              value: "postgresql://$(POSTGRES_USERNAME):$(POSTGRES_PASSWORD)@{{ .Values.postgres.clusterName }}-rw.{{ .Release.Namespace }}.svc.cluster.local:5432/{{ .Values.postgres.database }}"
       {{- end }}
       containers:
         - name: fnpc
@@ -65,11 +72,18 @@ spec:
                   name: {{ $.Values.secret.name }}
                   key: AUTH_SESSION_SECRET
             {{- end }}
-            - name: DATABASE_URL
+            - name: POSTGRES_USERNAME
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.secret.name }}
-                  key: DATABASE_URL
+                  name: {{ .Values.postgres.clusterName }}-owner
+                  key: username
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgres.clusterName }}-owner
+                  key: password
+            - name: DATABASE_URL
+              value: "postgresql://$(POSTGRES_USERNAME):$(POSTGRES_PASSWORD)@{{ .Values.postgres.clusterName }}-rw.{{ .Release.Namespace }}.svc.cluster.local:5432/{{ .Values.postgres.database }}"
             - name: ANTHROPIC_API_KEY
               valueFrom:
                 secretKeyRef:
