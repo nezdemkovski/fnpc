@@ -1,8 +1,16 @@
 import { createStep, createWorkflow } from "@mastra/core/workflows";
 import { z } from "zod";
-import { currentDateKey, currentMonthKey, parseUserDate } from "../../finance/dates";
+import {
+  currentDateKey,
+  currentMonthKey,
+  parseUserDate,
+} from "../../finance/dates";
 import { formatMoney, majorToMinor } from "../../finance/money";
-import { getOrCreateUser, runForecast, type ForecastResult } from "../../finance/profile-service";
+import {
+  getOrCreateUser,
+  runForecast,
+  type ForecastResult,
+} from "../../finance/profile-service";
 
 const forecastRowSchema = z.object({
   month: z.string(),
@@ -93,14 +101,20 @@ const purchaseDecisionInputSchema = z.object({
   mastraResourceId: z.string(),
   name: z.string(),
   amount: z.number(),
-  plannedFor: z.string().optional().describe("YYYY-MM or ISO date. Omit when user asks about buying now."),
+  plannedFor: z
+    .string()
+    .optional()
+    .describe("YYYY-MM or ISO date. Omit when user asks about buying now."),
   horizonMonths: z.number().int().min(1).max(24).default(6),
 });
 
 type PurchaseDecisionData = z.infer<typeof purchaseDecisionDataSchema>;
 type PurchaseDecisionOutput = z.infer<typeof purchaseDecisionOutputSchema>;
 
-const missingProfileSettings = (user: { defaultCurrency?: string | null; timezone?: string | null }) => {
+const missingProfileSettings = (user: {
+  defaultCurrency?: string | null;
+  timezone?: string | null;
+}) => {
   const missing: string[] = [];
   if (!user.defaultCurrency) missing.push("defaultCurrency");
   if (!user.timezone) missing.push("timezone");
@@ -131,11 +145,14 @@ const formatForecastRows = (forecast: ForecastResult, currency: string) =>
 
 const loadPurchaseProfileStep = createStep({
   id: "load-purchase-profile",
-  description: "Loads the user's durable profile and verifies settings required for financial calculations.",
+  description:
+    "Loads the user's durable profile and verifies settings required for financial calculations.",
   inputSchema: purchaseDecisionInputSchema,
   outputSchema: purchaseDecisionDataSchema,
   execute: async ({ inputData }) => {
-    const user = await getOrCreateUser({ mastraResourceId: inputData.mastraResourceId });
+    const user = await getOrCreateUser({
+      mastraResourceId: inputData.mastraResourceId,
+    });
     const missingProfileFields = missingProfileSettings(user);
 
     if (missingProfileFields.length > 0) {
@@ -145,13 +162,15 @@ const loadPurchaseProfileStep = createStep({
         missingProfileFields,
         currentDate: user.timezone ? currentDateKey(user.timezone) : null,
         currentMonth: user.timezone ? currentMonthKey(user.timezone) : null,
-        message: "Cannot evaluate a purchase until defaultCurrency and timezone are known.",
+        message:
+          "Cannot evaluate a purchase until defaultCurrency and timezone are known.",
       };
     }
 
     const currency = user.defaultCurrency;
     const timezone = user.timezone;
-    if (!currency || !timezone) throw new Error("Profile settings guard failed");
+    if (!currency || !timezone)
+      throw new Error("Profile settings guard failed");
 
     const plannedFor = inputData.plannedFor ?? currentMonthKey(timezone);
     const amountMinor = majorToMinor(inputData.amount);
@@ -177,7 +196,8 @@ const loadPurchaseProfileStep = createStep({
 
 const runBaselineForecastStep = createStep({
   id: "run-baseline-forecast",
-  description: "Runs the saved-plan baseline forecast without the candidate purchase.",
+  description:
+    "Runs the saved-plan baseline forecast without the candidate purchase.",
   inputSchema: purchaseDecisionDataSchema,
   outputSchema: purchaseDecisionDataSchema,
   execute: async ({ inputData, getInitData }) => {
@@ -199,11 +219,13 @@ const runBaselineForecastStep = createStep({
 
 const runPurchaseScenarioForecastStep = createStep({
   id: "run-purchase-scenario-forecast",
-  description: "Runs a what-if forecast with the candidate purchase included, without saving it.",
+  description:
+    "Runs a what-if forecast with the candidate purchase included, without saving it.",
   inputSchema: purchaseDecisionDataSchema,
   outputSchema: purchaseDecisionDataSchema,
   execute: async ({ inputData, getInitData }) => {
-    if (!inputData.ok || !inputData.userId || !inputData.scenario) return inputData;
+    if (!inputData.ok || !inputData.userId || !inputData.scenario)
+      return inputData;
 
     const initial = getInitData<typeof evaluatePurchase>();
     const scenarioForecast = await runForecast({
@@ -228,7 +250,8 @@ const runPurchaseScenarioForecastStep = createStep({
 
 const buildPurchaseDecisionStep = createStep({
   id: "build-purchase-decision",
-  description: "Compares baseline and what-if forecasts and returns a structured purchase decision.",
+  description:
+    "Compares baseline and what-if forecasts and returns a structured purchase decision.",
   inputSchema: purchaseDecisionDataSchema,
   outputSchema: purchaseDecisionOutputSchema,
   execute: async ({ inputData }) => {
@@ -240,12 +263,21 @@ const buildPurchaseDecisionStep = createStep({
       };
     }
 
-    if (!inputData.currency || !inputData.baseline || !inputData.scenarioForecast || !inputData.scenario) {
-      throw new Error("Purchase decision workflow reached decision step without required forecast data");
+    if (
+      !inputData.currency ||
+      !inputData.baseline ||
+      !inputData.scenarioForecast ||
+      !inputData.scenario
+    ) {
+      throw new Error(
+        "Purchase decision workflow reached decision step without required forecast data",
+      );
     }
     const currency = inputData.currency;
 
-    const baselineByMonth = new Map(inputData.baseline.rows.map((row) => [row.month, row]));
+    const baselineByMonth = new Map(
+      inputData.baseline.rows.map((row) => [row.month, row]),
+    );
     const purchaseMonthScenarioRow = inputData.scenarioForecast.rows.find(
       (row) => row.month === inputData.scenario?.plannedFor.slice(0, 7),
     );
@@ -254,24 +286,35 @@ const buildPurchaseDecisionStep = createStep({
       : undefined;
 
     const minimumFreeCashDeltaMinor =
-      inputData.scenarioForecast.minimumFreeCashMinor - inputData.baseline.minimumFreeCashMinor;
+      inputData.scenarioForecast.minimumFreeCashMinor -
+      inputData.baseline.minimumFreeCashMinor;
     const purchaseMonthClosingDeltaMinor =
       purchaseMonthBaselineRow && purchaseMonthScenarioRow
-        ? purchaseMonthScenarioRow.closingFreeCashMinor - purchaseMonthBaselineRow.closingFreeCashMinor
+        ? purchaseMonthScenarioRow.closingFreeCashMinor -
+          purchaseMonthBaselineRow.closingFreeCashMinor
         : minimumFreeCashDeltaMinor;
 
     const reasonCodes: string[] = [];
-    if (inputData.scenarioForecast.minimumFreeCashMinor < 0) reasonCodes.push("scenario_goes_negative");
-    if (inputData.scenarioForecast.rows.some((row) => row.riskLevel === "tight")) reasonCodes.push("tight_month_exists");
-    if (inputData.scenarioForecast.minimumFreeCashMinor < inputData.baseline.minimumFreeCashMinor) {
+    if (inputData.scenarioForecast.minimumFreeCashMinor < 0)
+      reasonCodes.push("scenario_goes_negative");
+    if (
+      inputData.scenarioForecast.rows.some((row) => row.riskLevel === "tight")
+    )
+      reasonCodes.push("tight_month_exists");
+    if (
+      inputData.scenarioForecast.minimumFreeCashMinor <
+      inputData.baseline.minimumFreeCashMinor
+    ) {
       reasonCodes.push("free_cash_buffer_reduced");
     }
-    if (inputData.baseline.minimumFreeCashMinor < 0) reasonCodes.push("baseline_already_negative");
+    if (inputData.baseline.minimumFreeCashMinor < 0)
+      reasonCodes.push("baseline_already_negative");
 
     const verdict: PurchaseDecisionOutput["verdict"] =
       inputData.scenarioForecast.minimumFreeCashMinor < 0
         ? "unsafe"
-        : reasonCodes.includes("tight_month_exists") || reasonCodes.includes("baseline_already_negative")
+        : reasonCodes.includes("tight_month_exists") ||
+            reasonCodes.includes("baseline_already_negative")
           ? "watch"
           : "safe";
 
@@ -286,7 +329,10 @@ const buildPurchaseDecisionStep = createStep({
         baselineClosingFreeCash: baselineRow
           ? formatMoney(baselineRow.closingFreeCashMinor, currency)
           : "n/a",
-        scenarioClosingFreeCash: formatMoney(scenarioRow.closingFreeCashMinor, currency),
+        scenarioClosingFreeCash: formatMoney(
+          scenarioRow.closingFreeCashMinor,
+          currency,
+        ),
         delta: formatMoney(deltaMinor, currency),
         scenarioRiskLevel: scenarioRow.riskLevel,
       };
@@ -299,12 +345,24 @@ const buildPurchaseDecisionStep = createStep({
       impact: {
         minimumFreeCashDeltaMinor,
         purchaseMonthClosingDeltaMinor,
-        formattedMinimumFreeCashDelta: formatMoney(minimumFreeCashDeltaMinor, currency),
-        formattedPurchaseMonthClosingDelta: formatMoney(purchaseMonthClosingDeltaMinor, currency),
+        formattedMinimumFreeCashDelta: formatMoney(
+          minimumFreeCashDeltaMinor,
+          currency,
+        ),
+        formattedPurchaseMonthClosingDelta: formatMoney(
+          purchaseMonthClosingDeltaMinor,
+          currency,
+        ),
       },
       formatted: {
-        baselineMinimumFreeCash: formatMoney(inputData.baseline.minimumFreeCashMinor, currency),
-        scenarioMinimumFreeCash: formatMoney(inputData.scenarioForecast.minimumFreeCashMinor, currency),
+        baselineMinimumFreeCash: formatMoney(
+          inputData.baseline.minimumFreeCashMinor,
+          currency,
+        ),
+        scenarioMinimumFreeCash: formatMoney(
+          inputData.scenarioForecast.minimumFreeCashMinor,
+          currency,
+        ),
         rows,
         scenarioRows: formatForecastRows(
           {

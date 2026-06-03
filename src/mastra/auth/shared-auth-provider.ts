@@ -1,10 +1,22 @@
-import { createHash, createHmac, createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { MastraAuthProvider } from "@mastra/core/server";
-import type { ISSOProvider, ISessionProvider, Session, User } from "@mastra/core/auth";
+import type {
+  ISSOProvider,
+  ISessionProvider,
+  Session,
+  User,
+} from "@mastra/core/auth";
 import type { HonoRequest } from "hono";
 
-export type SharedAuthConfig = {
+export interface MastraAuthRealmOptions {
+  authUrl?: string;
+  realm?: string;
+  sessionSecret?: string;
+  name?: string;
+}
+
+type NormalizedConfig = {
   baseUrl: string;
   jwksUrl: string;
   issuer: string;
@@ -31,36 +43,50 @@ const AUTH_FLOW_COOKIE = "fnpc-auth-flow";
 const SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 const FLOW_MAX_AGE_SECONDS = 10 * 60;
 
-export class SharedAuthProvider
+export class MastraAuthRealm
   extends MastraAuthProvider<SharedAuthUser>
   implements ISSOProvider<SharedAuthUser>, ISessionProvider<SharedAuthSession>
 {
   readonly isSimpleAuth = true;
 
+  private readonly config: NormalizedConfig;
   private readonly authOrigin: string;
   private readonly project: string;
   private readonly jwks: ReturnType<typeof createRemoteJWKSet>;
   private callbackCookieHeader = "";
 
-  constructor(private readonly config: SharedAuthConfig) {
-    super({ name: "shared-auth" });
+  constructor(options: MastraAuthRealmOptions = {}) {
+    super({ name: options.name ?? "realm-auth" });
 
-    const baseUrl = new URL(config.baseUrl);
-    const match = baseUrl.pathname.match(/^\/api\/([^/]+)\/auth\/?$/);
-    if (!match) {
-      throw new Error("AUTH_BASE_URL must look like https://host/api/<realm>/auth");
+    const { authUrl, realm } = resolveAuthTarget(options);
+    const sessionSecret =
+      options.sessionSecret ?? process.env.AUTH_SESSION_SECRET;
+    if (!sessionSecret) {
+      throw new Error(
+        "A session secret is required: pass `sessionSecret` or set AUTH_SESSION_SECRET.",
+      );
     }
 
-    this.authOrigin = baseUrl.origin;
-    this.project = match[1];
-    this.jwks = createRemoteJWKSet(new URL(config.jwksUrl));
+    const issuer = `${authUrl}/api/${realm}`;
+    const baseUrl = `${issuer}/auth`;
+
+    this.authOrigin = new URL(authUrl).origin;
+    this.project = realm;
+    this.config = {
+      baseUrl,
+      jwksUrl: `${baseUrl}/.well-known/jwks.json`,
+      issuer,
+      audience: [realm, issuer].join(","),
+      sessionSecret,
+    };
+    this.jwks = createRemoteJWKSet(new URL(this.config.jwksUrl));
   }
 
   getLoginButtonConfig() {
     return {
-      provider: "shared-auth",
-      text: "Sign in with Auth",
-      description: "Use the shared homelab auth service.",
+      provider: "realm-auth",
+      text: "Sign in",
+      description: "Sign in to access FNPC Studio.",
     };
   }
 
@@ -69,7 +95,10 @@ export class SharedAuthProvider
     loginUrl.searchParams.set("redirect_uri", redirectUri);
     loginUrl.searchParams.set("state", state);
     loginUrl.searchParams.set("mode", "login");
-    loginUrl.searchParams.set("code_challenge", this.pkceChallenge(redirectUri, state));
+    loginUrl.searchParams.set(
+      "code_challenge",
+      this.pkceChallenge(redirectUri, state),
+    );
     loginUrl.searchParams.set("code_challenge_method", "S256");
     return loginUrl.toString();
   }
@@ -111,7 +140,8 @@ export class SharedAuthProvider
     }
 
     const payload = await response.json().catch(() => null);
-    const authCookie = typeof payload?.sessionCookie === "string" ? payload.sessionCookie : "";
+    const authCookie =
+      typeof payload?.sessionCookie === "string" ? payload.sessionCookie : "";
     if (!authCookie) {
       throw new Error("Auth session cookie is missing");
     }
@@ -147,9 +177,7 @@ export class SharedAuthProvider
 
     const cookieHeader = requestHeader(request, "cookie");
     const sessionCookie =
-      token ||
-      parseCookie(cookieHeader).get(MASTRA_SESSION_COOKIE) ||
-      "";
+      token || parseCookie(cookieHeader).get(MASTRA_SESSION_COOKIE) || "";
     const session = await this.validateSession(sessionCookie);
     if (!session) return null;
 
@@ -165,7 +193,8 @@ export class SharedAuthProvider
   }
 
   async createSession(userId: string, metadata?: Record<string, unknown>) {
-    const authCookie = typeof metadata?.authCookie === "string" ? metadata.authCookie : "";
+    const authCookie =
+      typeof metadata?.authCookie === "string" ? metadata.authCookie : "";
     if (!authCookie) {
       throw new Error("authCookie metadata is required");
     }
@@ -198,8 +227,18 @@ export class SharedAuthProvider
     };
   }
 
-  async destroySession() {
-    return;
+  async destroySession(sessionId: string) {
+    const session = await this.validateSession(sessionId);
+    if (!session?.authCookie) return;
+
+    try {
+      await fetch(this.authApiUrl("/sign-out"), {
+        method: "POST",
+        headers: { Cookie: session.authCookie },
+      });
+    } catch {
+      return;
+    }
   }
 
   async refreshSession(sessionId: string) {
@@ -213,7 +252,11 @@ export class SharedAuthProvider
   }
 
   getSessionIdFromRequest(request: Request) {
-    return parseCookie(request.headers.get("cookie") ?? "").get(MASTRA_SESSION_COOKIE) ?? null;
+    return (
+      parseCookie(request.headers.get("cookie") ?? "").get(
+        MASTRA_SESSION_COOKIE,
+      ) ?? null
+    );
   }
 
   getSessionHeaders(session: SharedAuthSession) {
@@ -314,13 +357,13 @@ export class SharedAuthProvider
   }
 
   private pkceVerifier(redirectUri: string, state: string) {
-    return createHmac("sha256", this.config.sessionSecret)
+    return new Bun.CryptoHasher("sha256", this.config.sessionSecret)
       .update(`fnpc:pkce:${redirectUri}:${state}`)
       .digest("base64url");
   }
 
   private pkceChallenge(redirectUri: string, state: string) {
-    return createHash("sha256")
+    return new Bun.CryptoHasher("sha256")
       .update(this.pkceVerifier(redirectUri, state))
       .digest("base64url");
   }
@@ -330,7 +373,9 @@ export class SharedAuthProvider
   }
 
   private key() {
-    return createHash("sha256").update(this.config.sessionSecret).digest();
+    return new Bun.CryptoHasher("sha256")
+      .update(this.config.sessionSecret)
+      .digest();
   }
 
   private seal(value: unknown) {
@@ -374,8 +419,26 @@ export class SharedAuthProvider
   }
 }
 
-export const createSharedAuthProvider = (config: SharedAuthConfig) => {
-  return new SharedAuthProvider(config);
+const resolveAuthTarget = (options: MastraAuthRealmOptions) => {
+  const explicitUrl = options.authUrl ?? process.env.AUTH_URL;
+  const explicitRealm = options.realm ?? process.env.AUTH_REALM;
+  if (explicitUrl && explicitRealm) {
+    return { authUrl: explicitUrl.replace(/\/+$/, ""), realm: explicitRealm };
+  }
+
+  const baseUrl = process.env.AUTH_BASE_URL;
+  if (baseUrl) {
+    const url = new URL(baseUrl);
+    const match = url.pathname.match(/^\/api\/([^/]+)\/auth\/?$/);
+    if (match) {
+      return { authUrl: url.origin, realm: explicitRealm ?? match[1] };
+    }
+  }
+
+  throw new Error(
+    "Auth target is required: set `authUrl`+`realm` (or AUTH_URL+AUTH_REALM), " +
+      "or AUTH_BASE_URL=https://host/api/<realm>/auth.",
+  );
 };
 
 const parseCookie = (header: string) => {

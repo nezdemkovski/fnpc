@@ -3,7 +3,8 @@ import type { ToolExecutionContext } from "@mastra/core/tools";
 import { z } from "zod";
 import { evaluatePurchase } from "../workflows/evaluate-purchase";
 
-const resourceIdFromContext = (context?: ToolExecutionContext): string | undefined => context?.agent?.resourceId;
+const resourceIdFromContext = (context?: ToolExecutionContext) =>
+  context?.agent?.resourceId;
 
 export const evaluatePurchaseTool = createTool({
   id: "evaluate-purchase",
@@ -12,15 +13,24 @@ export const evaluatePurchaseTool = createTool({
   inputSchema: z.object({
     name: z.string(),
     amount: z.number(),
-    plannedFor: z.string().optional().describe("YYYY-MM or ISO date. Omit when user asks about buying now."),
+    plannedFor: z
+      .string()
+      .optional()
+      .describe("YYYY-MM or ISO date. Omit when user asks about buying now."),
     horizonMonths: z.number().int().min(1).max(24).default(6),
-    mastraResourceId: z.string().optional().describe("Only use when runtime resourceId is unavailable in Studio"),
+    mastraResourceId: z
+      .string()
+      .optional()
+      .describe("Only use when runtime resourceId is unavailable in Studio"),
   }),
   execute: async (input, context) => {
-    const mastraResourceId = resourceIdFromContext(context) ?? input.mastraResourceId;
-    if (!mastraResourceId) return { ok: false, missingInputs: ["mastraResourceId"] };
+    const mastraResourceId =
+      resourceIdFromContext(context) ?? input.mastraResourceId;
+    if (!mastraResourceId)
+      return { ok: false, missingInputs: ["mastraResourceId"] };
 
-    const workflow = context.mastra?.getWorkflow("evaluatePurchase") ?? evaluatePurchase;
+    const workflow =
+      context.mastra?.getWorkflow("evaluatePurchase") ?? evaluatePurchase;
     const run = await workflow.createRun({ resourceId: mastraResourceId });
     const result = await run.start({
       inputData: {
@@ -37,7 +47,10 @@ export const evaluatePurchaseTool = createTool({
     return {
       ok: false,
       workflowStatus: result.status,
-      message: result.status === "failed" ? result.error.message : "Purchase decision workflow did not complete.",
+      message:
+        result.status === "failed"
+          ? result.error.message
+          : "Purchase decision workflow did not complete.",
     };
   },
 });

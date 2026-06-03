@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "mastra dev",
-    "build": "mastra build --studio",
+    "build": "mastra build --studio && bun build scripts/migrate.ts --target bun --external pg --external drizzle-orm --outfile .mastra/output/migrate.mjs",
     "start": "mastra start",
     "typecheck": "tsc --noEmit",
     "eval:seed-datasets": "bun --env-file .env scripts/seed-eval-datasets.ts",
@@ -15,18 +15,19 @@
     "eval:run-all": "bun --env-file .env scripts/run-eval-datasets.ts --target=all",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "db:migrate:deploy": "bun scripts/migrate.ts",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
     "@chat-adapter/telegram": "^4.30.0",
     "@date-fns/tz": "^1.5.0",
-    "@mastra/clickhouse": "^1.9.0",
-    "@mastra/core": "latest",
-    "@mastra/hono": "latest",
-    "@mastra/memory": "latest",
-    "@mastra/observability": "^1.14.0",
-    "@mastra/pg": "^1.11.1",
+    "@mastra/clickhouse": "^1.9.1",
+    "@mastra/core": "^1.37.1",
+    "@mastra/hono": "^1.4.20",
+    "@mastra/memory": "^1.20.0",
+    "@mastra/observability": "^1.14.1",
+    "@mastra/pg": "^1.12.0",
     "date-fns": "^4.4.0",
     "drizzle-orm": "^1.0.0-beta.22",
     "hono": "latest",
@@ -38,7 +39,7 @@
     "@types/bun": "latest",
     "@types/node": "^25.9.1",
     "drizzle-kit": "^1.0.0-beta.22",
-    "mastra": "^1.10.2",
+    "mastra": "^1.11.0",
     "typescript": "latest"
   }
 }

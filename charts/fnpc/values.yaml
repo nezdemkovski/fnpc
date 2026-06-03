@@ -2,7 +2,7 @@ replicaCount: 1
 
 image:
   repository: ghcr.io/nezdemkovski/fnpc
-  tag: "0.1.10"
+  tag: "0.1.11"
   pullPolicy: IfNotPresent
 
 env:
@@ -12,10 +12,8 @@ env:
   telegramAdapterMode: webhook
   aiModel: claude-sonnet-4-6
   auth:
-    baseUrl: https://auth.nezdemkovski.cloud/api/fnpc-studio/auth
-    jwksUrl: https://auth.nezdemkovski.cloud/api/fnpc-studio/auth/.well-known/jwks.json
-    jwtIssuer: https://auth.nezdemkovski.cloud/api/fnpc-studio
-    jwtAudience: fnpc-studio,https://auth.nezdemkovski.cloud/api/fnpc-studio
+    url: https://auth.nezdemkovski.cloud
+    realm: fnpc-studio
 
 migrations:
   enabled: true

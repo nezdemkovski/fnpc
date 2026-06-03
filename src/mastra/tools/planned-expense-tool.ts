@@ -3,14 +3,22 @@ import type { ToolExecutionContext } from "@mastra/core/tools";
 import { z } from "zod";
 import { mutatePlannedExpense } from "../workflows/mutate-planned-expense";
 
-const resourceIdFromContext = (context?: ToolExecutionContext): string | undefined => context?.agent?.resourceId;
+const resourceIdFromContext = (context?: ToolExecutionContext) =>
+  context?.agent?.resourceId;
 
 export const mutatePlannedExpenseTool = createTool({
   id: "mutate-planned-expense",
   description:
     "Use this for planned expense operations: create a plan, update it, move it to another date/month, cancel it, approve it, or mark it as paid. Returns the changed plan and forecast impact.",
   inputSchema: z.object({
-    action: z.enum(["create", "update", "move", "cancel", "approve", "mark_paid"]),
+    action: z.enum([
+      "create",
+      "update",
+      "move",
+      "cancel",
+      "approve",
+      "mark_paid",
+    ]),
     plannedExpenseId: z.string().optional(),
     name: z.string().optional(),
     newName: z.string().optional(),
@@ -20,13 +28,20 @@ export const mutatePlannedExpenseTool = createTool({
     priority: z.enum(["must", "should", "nice_to_have"]).optional(),
     horizonMonths: z.number().int().min(1).max(24).default(6),
     reason: z.string().optional(),
-    mastraResourceId: z.string().optional().describe("Only use when runtime resourceId is unavailable in Studio"),
+    mastraResourceId: z
+      .string()
+      .optional()
+      .describe("Only use when runtime resourceId is unavailable in Studio"),
   }),
   execute: async (input, context) => {
-    const mastraResourceId = resourceIdFromContext(context) ?? input.mastraResourceId;
-    if (!mastraResourceId) return { ok: false, missingInputs: ["mastraResourceId"] };
+    const mastraResourceId =
+      resourceIdFromContext(context) ?? input.mastraResourceId;
+    if (!mastraResourceId)
+      return { ok: false, missingInputs: ["mastraResourceId"] };
 
-    const workflow = context.mastra?.getWorkflow("mutatePlannedExpense") ?? mutatePlannedExpense;
+    const workflow =
+      context.mastra?.getWorkflow("mutatePlannedExpense") ??
+      mutatePlannedExpense;
     const run = await workflow.createRun({ resourceId: mastraResourceId });
     const result = await run.start({
       inputData: {
@@ -49,7 +64,10 @@ export const mutatePlannedExpenseTool = createTool({
     return {
       ok: false,
       workflowStatus: result.status,
-      message: result.status === "failed" ? result.error.message : "Planned expense mutation did not complete.",
+      message:
+        result.status === "failed"
+          ? result.error.message
+          : "Planned expense mutation did not complete.",
     };
   },
 });

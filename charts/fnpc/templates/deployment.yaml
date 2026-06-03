@@ -25,36 +25,7 @@ spec:
         - name: db-migrate
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command:
-            - node
-            - --input-type=module
-            - -e
-            - |
-              import pg from "pg";
-              import { drizzle } from "drizzle-orm/node-postgres";
-              import { migrate } from "drizzle-orm/node-postgres/migrator";
-
-              const requiredEnv = (name) => {
-                const value = process.env[name];
-                if (!value) throw new Error(`${name} is required`);
-                return value;
-              };
-
-              const pool = new pg.Pool({
-                user: requiredEnv("POSTGRES_USERNAME"),
-                password: requiredEnv("POSTGRES_PASSWORD"),
-                host: requiredEnv("POSTGRES_HOST"),
-                port: Number(process.env.POSTGRES_PORT ?? "5432"),
-                database: requiredEnv("POSTGRES_DATABASE"),
-              });
-
-              console.log(`Running database migrations using POSTGRES_* host=${process.env.POSTGRES_HOST} port=${process.env.POSTGRES_PORT ?? "5432"} database=${process.env.POSTGRES_DATABASE}`);
-              try {
-                await migrate(drizzle({ client: pool }), { migrationsFolder: "/app/drizzle" });
-                console.log("Database migrations completed");
-              } finally {
-                await pool.end();
-              }
+          command: ["bun", "migrate.mjs"]
           env:
             - name: POSTGRES_USERNAME
               valueFrom:
@@ -89,14 +60,10 @@ spec:
             - name: AI_MODEL
               value: {{ .Values.env.aiModel | quote }}
             {{- with .Values.env.auth }}
-            - name: AUTH_BASE_URL
-              value: {{ .baseUrl | quote }}
-            - name: AUTH_JWKS_URL
-              value: {{ .jwksUrl | quote }}
-            - name: AUTH_JWT_ISSUER
-              value: {{ .jwtIssuer | quote }}
-            - name: AUTH_JWT_AUDIENCE
-              value: {{ .jwtAudience | quote }}
+            - name: AUTH_URL
+              value: {{ .url | quote }}
+            - name: AUTH_REALM
+              value: {{ .realm | quote }}
             - name: AUTH_SESSION_SECRET
               valueFrom:
                 secretKeyRef:

@@ -2,7 +2,9 @@ import { z } from "zod";
 
 export const accountSchema = z.object({
   name: z.string(),
-  type: z.enum(["checking", "cash", "savings", "brokerage", "crypto", "other"]).optional(),
+  type: z
+    .enum(["checking", "cash", "savings", "brokerage", "crypto", "other"])
+    .optional(),
   currency: z.string().length(3).optional(),
   balance: z.number().optional(),
   balanceAsOf: z.string().optional(),
@@ -66,7 +68,12 @@ export const savingsRuleSchema = z.object({
 
 export const deleteFactSchema = z.discriminatedUnion("entityType", [
   z.object({
-    entityType: z.enum(["account", "income_rule", "recurring_expense", "planned_expense"]),
+    entityType: z.enum([
+      "account",
+      "income_rule",
+      "recurring_expense",
+      "planned_expense",
+    ]),
     name: z.string(),
     reason: z.string().optional(),
   }),
@@ -88,7 +95,9 @@ export const financialFactsPatchSchema = z.object({
   deleteFacts: z.array(deleteFactSchema).default([]),
 });
 
-export const needsDefaultCurrency = (input: z.infer<typeof financialFactsPatchSchema>) =>
+export const needsDefaultCurrency = (
+  input: z.infer<typeof financialFactsPatchSchema>,
+) =>
   [
     ...input.accounts,
     ...input.incomeRules,
@@ -98,5 +107,6 @@ export const needsDefaultCurrency = (input: z.infer<typeof financialFactsPatchSc
     ...input.savingsBuckets,
   ].some((item) => !item.currency);
 
-export const needsTimezone = (input: z.infer<typeof financialFactsPatchSchema>) =>
-  input.accounts.some((account) => typeof account.balance === "number");
+export const needsTimezone = (
+  input: z.infer<typeof financialFactsPatchSchema>,
+) => input.accounts.some((account) => typeof account.balance === "number");

@@ -1,5 +1,13 @@
 import { TZDate } from "@date-fns/tz";
-import { format, isBefore, isValid, parse, parseISO, startOfMonth, subMonths } from "date-fns";
+import {
+  format,
+  isBefore,
+  isValid,
+  parse,
+  parseISO,
+  startOfMonth,
+  subMonths,
+} from "date-fns";
 import { monthStart } from "./months";
 
 const DATE_KEY_FORMAT = "yyyy-MM-dd";
@@ -13,7 +21,9 @@ export const currentMonthKey = (timezone: string, now = new Date()): string =>
 
 const utcDateStart = (value: string): Date => {
   const parsed = parse(value, DATE_KEY_FORMAT, new Date(0));
-  return new Date(Date.UTC(parsed.getFullYear(), parsed.getMonth(), parsed.getDate()));
+  return new Date(
+    Date.UTC(parsed.getFullYear(), parsed.getMonth(), parsed.getDate()),
+  );
 };
 
 export const parseUserDate = (value: string): Date => {
@@ -26,7 +36,10 @@ export const parseUserDate = (value: string): Date => {
   return date;
 };
 
-export const normalizeCurrency = (currency: string | null | undefined, fallback?: string | null): string => {
+export const normalizeCurrency = (
+  currency: string | null | undefined,
+  fallback?: string | null,
+): string => {
   const value = currency ?? fallback;
   if (!value) throw new Error("Currency is required");
   return value.toUpperCase();
@@ -42,10 +55,13 @@ export const safeReportedBalanceDate = ({
   now?: Date;
 }): Date => {
   if (!value) return now;
-  if (!timezone) throw new Error("Timezone is required when balanceAsOf is provided");
+  if (!timezone)
+    throw new Error("Timezone is required when balanceAsOf is provided");
 
   const date = parseUserDate(value);
-  const earliestAcceptedDate = startOfMonth(subMonths(TZDate.tz(timezone, now), 1));
+  const earliestAcceptedDate = startOfMonth(
+    subMonths(TZDate.tz(timezone, now), 1),
+  );
   if (isBefore(date, earliestAcceptedDate)) return now;
 
   return date;

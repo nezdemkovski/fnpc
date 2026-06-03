@@ -3,22 +3,32 @@ import type { ToolExecutionContext } from "@mastra/core/tools";
 import { z } from "zod";
 import { generateFinancialReport } from "../workflows/generate-financial-report";
 
-const resourceIdFromContext = (context?: ToolExecutionContext): string | undefined => context?.agent?.resourceId;
+const resourceIdFromContext = (context?: ToolExecutionContext) =>
+  context?.agent?.resourceId;
 
 export const generateFinancialReportTool = createTool({
   id: "generate-financial-report",
   description:
     "Use this for daily, weekly, monthly, and forecast reports. It returns current balances, operating cash, protected savings, upcoming plans, forecast rows, and risk months.",
   inputSchema: z.object({
-    reportType: z.enum(["daily", "weekly", "monthly", "forecast"]).default("daily"),
+    reportType: z
+      .enum(["daily", "weekly", "monthly", "forecast"])
+      .default("daily"),
     horizonMonths: z.number().int().min(1).max(24).default(6),
-    mastraResourceId: z.string().optional().describe("Only use when runtime resourceId is unavailable in Studio"),
+    mastraResourceId: z
+      .string()
+      .optional()
+      .describe("Only use when runtime resourceId is unavailable in Studio"),
   }),
   execute: async (input, context) => {
-    const mastraResourceId = resourceIdFromContext(context) ?? input.mastraResourceId;
-    if (!mastraResourceId) return { ok: false, missingInputs: ["mastraResourceId"] };
+    const mastraResourceId =
+      resourceIdFromContext(context) ?? input.mastraResourceId;
+    if (!mastraResourceId)
+      return { ok: false, missingInputs: ["mastraResourceId"] };
 
-    const workflow = context.mastra?.getWorkflow("generateFinancialReport") ?? generateFinancialReport;
+    const workflow =
+      context.mastra?.getWorkflow("generateFinancialReport") ??
+      generateFinancialReport;
     const run = await workflow.createRun({ resourceId: mastraResourceId });
     const result = await run.start({
       inputData: {
@@ -33,7 +43,10 @@ export const generateFinancialReportTool = createTool({
     return {
       ok: false,
       workflowStatus: result.status,
-      message: result.status === "failed" ? result.error.message : "Financial report generation did not complete.",
+      message:
+        result.status === "failed"
+          ? result.error.message
+          : "Financial report generation did not complete.",
     };
   },
 });

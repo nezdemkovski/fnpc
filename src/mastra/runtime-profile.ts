@@ -1,4 +1,5 @@
 import type { MastraDBMessage } from "@mastra/core/agent";
+
 import { currentDateKey, currentMonthKey } from "../finance/dates";
 import { getOrCreateUser } from "../finance/profile-service";
 import { getUserProfile } from "../finance/user-preferences";
@@ -11,7 +12,7 @@ export type RuntimeProfile = {
   timezone?: string | null;
 };
 
-export const resourceIdFromMessages = (messages: MastraDBMessage[]): string | undefined =>
+export const resourceIdFromMessages = (messages: MastraDBMessage[]) =>
   [...messages].reverse().find((message) => message.resourceId)?.resourceId;
 
 export const missingRuntimeFields = (profile: RuntimeProfile): string[] => {
@@ -23,7 +24,7 @@ export const missingRuntimeFields = (profile: RuntimeProfile): string[] => {
   return missing;
 };
 
-export const getRuntimeProfile = async (resourceId?: string): Promise<RuntimeProfile> => {
+export const getRuntimeProfile = async (resourceId?: string) => {
   if (!resourceId) return {};
 
   try {
@@ -42,10 +43,12 @@ export const getRuntimeProfile = async (resourceId?: string): Promise<RuntimePro
   }
 };
 
-export const buildRuntimeContextMessage = (profile: RuntimeProfile): string => {
+export const buildRuntimeContextMessage = (profile: RuntimeProfile) => {
   const missingFields = missingRuntimeFields(profile);
   const today = profile.timezone ? currentDateKey(profile.timezone) : "unknown";
-  const currentMonth = profile.timezone ? currentMonthKey(profile.timezone) : "unknown";
+  const currentMonth = profile.timezone
+    ? currentMonthKey(profile.timezone)
+    : "unknown";
 
   return `Runtime context:
 - Resource ID: ${profile.resourceId ?? "unknown"}
