@@ -34,7 +34,7 @@ if ("connectionString" in connectionConfig) {
 }
 
 const pool = new pg.Pool(connectionConfig);
-const db = drizzle(pool);
+const db = drizzle({ client: pool });
 
 try {
   await migrate(db, { migrationsFolder: "./drizzle" });
