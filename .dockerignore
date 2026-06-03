@@ -1,8 +1,6 @@
 .git
 .github
-.mastra/*
-!.mastra/output
-!.mastra/output/**
+.mastra
 node_modules
 dist
 coverage

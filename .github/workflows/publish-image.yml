@@ -40,9 +40,6 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
-      - name: Build Mastra output
-        run: bun run build
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
