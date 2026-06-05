@@ -10,6 +10,7 @@ import {
   saveFinancialFactsTool,
   updateUserPreferencesTool,
 } from "../tools/financial-profile-tools";
+import { recordActualExpenseTool } from "../tools/actual-expense-tool";
 import { generateFinancialReportTool } from "../tools/financial-report-tool";
 import { mutatePlannedExpenseTool } from "../tools/planned-expense-tool";
 import { evaluatePurchaseTool } from "../tools/purchase-decision-tool";
@@ -49,6 +50,11 @@ Keep operating free cash separate from protected savings. Protected savings are 
 explicitly says to use them.
 
 Tool routing rules:
+- Prefer workflow-backed tools over generic profile mutation tools. The generic saveFinancialFactsTool is only for
+  onboarding-style bulk facts or explicit corrections that do not have a more specific workflow.
+- For payments that already happened ("paid", "was charged", "spent", "went through"), use
+  recordActualExpenseTool. If the user omitted an amount, let the workflow match a saved recurring/planned expense.
+  Never invent an amount from memory or from a guess.
 - For "how much is free now", "current free money", "on hand", or similar current-state questions, use
   getFinancialSnapshotTool and answer from availableOperatingCash. Do not answer with end-of-month forecast
   unless the user explicitly asks for forecast, end of month, next salary, or future months.
@@ -59,8 +65,7 @@ Tool routing rules:
 - For creating, moving, cancelling, approving, or marking planned expenses paid, use mutatePlannedExpenseTool.
 - For savings buckets/envelopes, goal contributions, and reallocating existing monthly savings, use
   mutateSavingsPlanTool instead of the generic saveFinancialFactsTool.
-- For durable facts about balances, recurring expenses, actual expenses, or preferences, save them with the
-  relevant tool.
+- For durable facts about balances, recurring expenses, or preferences, save them with the relevant tool.
 
 Savings and goal rules:
 - Separate committed savings contributions, protected buckets, goal buckets, operating free cash, and discretionary
@@ -77,8 +82,9 @@ Action discipline:
 - Do not ask a confirmation question and also perform the mutating action in the same assistant turn.
 - If the user gives a short confirmation like "yes" or "first", resolve it against the immediately preceding
   question. If there were multiple options and the answer is ambiguous, ask one narrow clarification.
-- If the user asks how a number was calculated, show the actual formula and source numbers. Never answer that
-  the tool confirmed a number while hiding the methodology.
+- If the user asks how a number was calculated or where a fact came from, inspect saved tool results/history or use
+  the relevant read workflow/tool. Never answer that the tool confirmed a number while hiding the methodology.
+  Never say you cannot see history when Mastra memory has the thread.
 - You do not have live web search inside Telegram. If the user asks you to google a current price, say that live
   lookup is unavailable and either ask for the amount or explicitly label any estimate as a rough assumption.
 
@@ -94,6 +100,7 @@ export const financialAgent = new Agent({
   inputProcessors: [new RuntimeProfileProcessor()],
   tools: {
     saveFinancialFactsTool,
+    recordActualExpenseTool,
     updateUserPreferencesTool,
     getFinancialSnapshotTool,
     runFinancialForecastTool,
@@ -114,7 +121,7 @@ export const financialAgent = new Agent({
         },
   memory: new Memory({
     options: {
-      lastMessages: 30,
+      lastMessages: 80,
       generateTitle: true,
       workingMemory: {
         enabled: true,

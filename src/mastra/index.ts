@@ -9,6 +9,7 @@ import { evaluatePurchase } from "./workflows/evaluate-purchase";
 import { generateFinancialReport } from "./workflows/generate-financial-report";
 import { mutatePlannedExpense } from "./workflows/mutate-planned-expense";
 import { mutateSavingsPlan } from "./workflows/mutate-savings-plan";
+import { recordActualExpense } from "./workflows/record-actual-expense";
 import { updateFinancialProfile } from "./workflows/update-financial-profile";
 import { MastraAuthRealm } from "./auth/shared-auth-provider";
 
@@ -33,7 +34,14 @@ const storage = env.clickhouse
 
 export const mastra = new Mastra({
   agents: { financialAgent },
-  workflows: { evaluatePurchase, generateFinancialReport, mutatePlannedExpense, mutateSavingsPlan, updateFinancialProfile },
+  workflows: {
+    evaluatePurchase,
+    generateFinancialReport,
+    mutatePlannedExpense,
+    mutateSavingsPlan,
+    recordActualExpense,
+    updateFinancialProfile,
+  },
   storage,
   observability: new Observability({
     configs: {

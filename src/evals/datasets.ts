@@ -274,6 +274,53 @@ export const evalDatasetDefinitions: EvalDatasetDefinition[] = [
     ],
   },
   {
+    name: "fnpc-actual-expense-workflow",
+    description:
+      "Synthetic workflow inputs for recordActualExpense. Checks explicit payments and matching saved recurring expenses when amount is omitted.",
+    targetType: "workflow",
+    targetIds: ["recordActualExpense"],
+    inputSchema: workflowInputSchema,
+    groundTruthSchema: workflowGroundTruthSchema,
+    items: [
+      {
+        input: {
+          mastraResourceId: "eval:actual-expense:explicit",
+          name: "keyboard repair",
+          amount: 850,
+          currency: "USD",
+          spentAt: "2026-06-02",
+          sourceMessageId: "eval-message:actual-expense-explicit",
+        },
+        groundTruth: {
+          ok: true,
+          changed: { entityType: "actual_expense", action: "created", name: "keyboard repair" },
+          expectations: {
+            amount: 850,
+            usesUserProvidedAmount: true,
+          },
+        },
+        metadata: { category: "workflow", case: "explicit_actual_expense" },
+      },
+      {
+        input: {
+          mastraResourceId: "eval:actual-expense:recurring-match",
+          name: "internet bill",
+          spentAt: "2026-06-02",
+          sourceMessageId: "eval-message:actual-expense-recurring-match",
+        },
+        groundTruth: {
+          ok: true,
+          changed: { entityType: "actual_expense", action: "created", name: "internet service" },
+          expectations: {
+            amountTakenFromRecurring: true,
+            doesNotCreateRecurringExpense: true,
+          },
+        },
+        metadata: { category: "workflow", case: "match_recurring_without_amount" },
+      },
+    ],
+  },
+  {
     name: "fnpc-report-workflow",
     description:
       "Synthetic workflow inputs for generateFinancialReport. Checks report shape rather than exact personal values.",

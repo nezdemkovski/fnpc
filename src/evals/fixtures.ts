@@ -83,6 +83,18 @@ export const resetWorkflowEvalFixtures = async (definitions: EvalDatasetDefiniti
       isEssential: true,
     });
 
+    if (user.mastraResourceId === "eval:actual-expense:recurring-match") {
+      await db.insert(recurringExpenses).values({
+        userId: user.id,
+        name: "internet service",
+        amountMinor: 75_00,
+        currency: "USD",
+        frequency: "monthly",
+        dayOfMonth: 2,
+        isEssential: true,
+      });
+    }
+
     const [bucket] = await db
       .insert(savingsBuckets)
       .values({
