@@ -55,6 +55,14 @@ export const recordActualExpenseTool = createTool({
       .describe(
         "Use a candidate id returned by a previous needsConfirmation result, formatted as recurring_expense:<id> or planned_expense:<id>.",
       ),
+    accountId: z
+      .string()
+      .optional()
+      .describe("Use only when the user explicitly identified the account to debit."),
+    accountName: z
+      .string()
+      .optional()
+      .describe("Use only when the user explicitly identified the account to debit."),
     mastraResourceId: z
       .string()
       .optional()
@@ -83,6 +91,8 @@ export const recordActualExpenseTool = createTool({
         spentAt: input.spentAt,
         note: input.note,
         confirmedCandidateId: input.confirmedCandidateId,
+        accountId: input.accountId,
+        accountName: input.accountName,
         sourceMessageId:
           input.sourceMessageId ?? latestTelegramMessageIdFromContext(context),
         sourceText: latestUserMessageFromContext(context),

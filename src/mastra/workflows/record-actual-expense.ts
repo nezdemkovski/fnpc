@@ -1,8 +1,10 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { createStep, createWorkflow } from "@mastra/core/workflows";
 import { z } from "zod";
 import { db } from "../../db/client";
 import {
+  accountBalances,
+  accounts,
   actualExpenses,
   financialEvents,
   plannedExpenses,
@@ -32,6 +34,8 @@ const recordActualExpenseInputSchema = z.object({
   spentAt: z.string().optional(),
   note: z.string().optional(),
   confirmedCandidateId: z.string().optional(),
+  accountId: z.string().optional(),
+  accountName: z.string().optional(),
   sourceMessageId: z.string().optional(),
   sourceText: z.string().optional(),
 });
@@ -53,6 +57,14 @@ const resolvedCandidateSchema = candidateSchema.extend({
   score: z.number(),
 });
 
+const spendingAccountSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  type: z.enum(["checking", "cash", "savings", "brokerage", "crypto", "other"]),
+  currency: z.string(),
+  latestBalanceMinor: z.number(),
+});
+
 const recordActualExpenseStateSchema = z.object({
   ok: z.boolean(),
   mastraResourceId: z.string(),
@@ -68,7 +80,9 @@ const recordActualExpenseStateSchema = z.object({
   resolvedCandidate: resolvedCandidateSchema.optional(),
   resolvedAmountMinor: z.number().optional(),
   resolvedCurrency: z.string().optional(),
+  spendingAccount: spendingAccountSchema.optional(),
   actualExpenseId: z.string().optional(),
+  accountBalanceId: z.string().optional(),
   plannedExpenseId: z.string().optional(),
   snapshot: z
     .object({
@@ -298,6 +312,86 @@ const resolveActualExpenseStep = createStep({
   },
 });
 
+const resolveSpendingAccountStep = createStep({
+  id: "resolve-spending-account",
+  description:
+    "Resolves the account to debit for a real payment. Refuses ambiguous account changes.",
+  inputSchema: recordActualExpenseStateSchema,
+  outputSchema: recordActualExpenseStateSchema,
+  execute: async ({ inputData, getInitData }) => {
+    if (!inputData.ok || !inputData.userId || !inputData.resolvedCurrency) {
+      return inputData;
+    }
+
+    const initial = getInitData<RecordActualExpenseInput>();
+    const activeAccounts = await db
+      .select()
+      .from(accounts)
+      .where(
+        and(
+          eq(accounts.userId, inputData.userId),
+          eq(accounts.isActive, true),
+          eq(accounts.currency, inputData.resolvedCurrency),
+        ),
+      );
+
+    const spendingAccounts = activeAccounts.filter((account) =>
+      account.type === "checking" || account.type === "cash",
+    );
+    const explicitAccount = initial.accountId
+      ? spendingAccounts.find((account) => account.id === initial.accountId)
+      : initial.accountName
+        ? spendingAccounts.find(
+            (account) =>
+              account.name.toLowerCase() === initial.accountName!.toLowerCase(),
+          )
+        : undefined;
+    const selectedAccount =
+      explicitAccount ??
+      (spendingAccounts.length === 1 ? spendingAccounts[0] : undefined);
+
+    if (!selectedAccount) {
+      return {
+        ...inputData,
+        ok: false,
+        needsConfirmation: true,
+        message:
+          spendingAccounts.length === 0
+            ? "No active checking or cash account exists for this currency. Add or identify the account before recording the payment."
+            : "Multiple checking/cash accounts could be debited. Confirm the account before recording the payment.",
+      };
+    }
+
+    const [latestBalance] = await db
+      .select()
+      .from(accountBalances)
+      .where(eq(accountBalances.accountId, selectedAccount.id))
+      .orderBy(desc(accountBalances.asOf), desc(accountBalances.createdAt))
+      .limit(1);
+
+    if (!latestBalance) {
+      return {
+        ...inputData,
+        ok: false,
+        needsConfirmation: true,
+        message:
+          "The selected account has no known balance. Set the account balance before recording payments from it.",
+      };
+    }
+
+    return {
+      ...inputData,
+      spendingAccount: {
+        id: selectedAccount.id,
+        name: selectedAccount.name,
+        type: selectedAccount.type,
+        currency: selectedAccount.currency,
+        latestBalanceMinor: latestBalance.amountMinor,
+      },
+    };
+  },
+});
+
 const applyActualExpenseStep = createStep({
   id: "apply-actual-expense",
   description:
@@ -309,7 +403,8 @@ const applyActualExpenseStep = createStep({
       !inputData.ok ||
       !inputData.userId ||
       inputData.resolvedAmountMinor === undefined ||
-      !inputData.resolvedCurrency
+      !inputData.resolvedCurrency ||
+      !inputData.spendingAccount
     ) {
       return inputData;
     }
@@ -339,37 +434,73 @@ const applyActualExpenseStep = createStep({
         typeof initial.amount === "number" ? "user_provided" : "matched_saved_fact",
     };
 
-    const [expense] = await db
-      .insert(actualExpenses)
-      .values({
-        userId: inputData.userId,
-        plannedExpenseId: matchedPlan?.id,
-        name: inputData.resolvedCandidate?.name ?? initial.name,
-        amountMinor: inputData.resolvedAmountMinor,
-        currency: inputData.resolvedCurrency,
-        spentAt,
-        source: "telegram",
-        note: [initial.note, JSON.stringify(provenance)]
-          .filter(Boolean)
-          .join("\n"),
-      })
-      .returning();
+    const adjustedBalanceMinor =
+      inputData.spendingAccount.latestBalanceMinor - inputData.resolvedAmountMinor;
 
-    if (matchedPlan) {
-      await db
-        .update(plannedExpenses)
-        .set({ status: "paid", updatedAt: new Date() })
-        .where(eq(plannedExpenses.id, matchedPlan.id));
-    }
+    const { expense, accountBalance } = await db.transaction(async (tx) => {
+      const [createdExpense] = await tx
+        .insert(actualExpenses)
+        .values({
+          userId: inputData.userId!,
+          plannedExpenseId: matchedPlan?.id,
+          accountId: inputData.spendingAccount!.id,
+          name: inputData.resolvedCandidate?.name ?? initial.name,
+          amountMinor: inputData.resolvedAmountMinor!,
+          currency: inputData.resolvedCurrency!,
+          spentAt,
+          source: "telegram",
+          note: [initial.note, JSON.stringify(provenance)]
+            .filter(Boolean)
+            .join("\n"),
+        })
+        .returning();
 
-    await db.insert(financialEvents).values({
-      userId: inputData.userId,
-      entityType: "actual_expense",
-      entityId: expense.id,
-      eventType: "created",
-      after: expense,
-      reason: JSON.stringify(provenance),
-      sourceMessageId: initial.sourceMessageId,
+      if (matchedPlan) {
+        await tx
+          .update(plannedExpenses)
+          .set({ status: "paid", updatedAt: new Date() })
+          .where(eq(plannedExpenses.id, matchedPlan.id));
+      }
+
+      const [createdBalance] = await tx
+        .insert(accountBalances)
+        .values({
+          accountId: inputData.spendingAccount!.id,
+          amountMinor: adjustedBalanceMinor,
+          asOf: spentAt,
+          source: "adjusted",
+        })
+        .returning();
+
+      await tx.insert(financialEvents).values({
+        userId: inputData.userId!,
+        entityType: "actual_expense",
+        entityId: createdExpense.id,
+        eventType: "created",
+        after: createdExpense,
+        reason: JSON.stringify(provenance),
+        sourceMessageId: initial.sourceMessageId,
+      });
+
+      await tx.insert(financialEvents).values({
+        userId: inputData.userId!,
+        entityType: "account_balance",
+        entityId: createdBalance.id,
+        eventType: "created",
+        before: {
+          accountId: inputData.spendingAccount!.id,
+          amountMinor: inputData.spendingAccount!.latestBalanceMinor,
+        },
+        after: createdBalance,
+        reason: JSON.stringify({
+          source: "record-actual-expense",
+          actualExpenseId: createdExpense.id,
+          accountName: inputData.spendingAccount!.name,
+        }),
+        sourceMessageId: initial.sourceMessageId,
+      });
+
+      return { expense: createdExpense, accountBalance: createdBalance };
     });
 
     const snapshot = await getFinancialSnapshot(inputData.userId);
@@ -377,6 +508,7 @@ const applyActualExpenseStep = createStep({
     return {
       ...inputData,
       actualExpenseId: expense.id,
+      accountBalanceId: accountBalance.id,
       plannedExpenseId: matchedPlan?.id,
       snapshot: snapshot.totals,
       formatted: {
@@ -405,5 +537,6 @@ export const recordActualExpense = createWorkflow({
   .then(loadActualExpenseProfileStep)
   .then(loadExpenseCandidatesStep)
   .then(resolveActualExpenseStep)
+  .then(resolveSpendingAccountStep)
   .then(applyActualExpenseStep)
   .commit();

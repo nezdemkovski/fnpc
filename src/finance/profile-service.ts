@@ -91,7 +91,7 @@ export const getFinancialSnapshot = async (userId: string, now = new Date(), dat
         .select()
         .from(accountBalances)
         .where(eq(accountBalances.accountId, account.id))
-        .orderBy(desc(accountBalances.asOf))
+        .orderBy(desc(accountBalances.asOf), desc(accountBalances.createdAt))
         .limit(1);
       return { account, balance };
     }),
