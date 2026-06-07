@@ -1,4 +1,4 @@
-FROM oven/bun:1.3.14-alpine AS build
+FROM oven/bun:1.3.14 AS build
 
 WORKDIR /app
 
@@ -8,7 +8,7 @@ RUN bun install --frozen-lockfile
 COPY . .
 RUN bun run build
 
-FROM oven/bun:1.3.14-alpine AS runtime
+FROM oven/bun:1.3.14 AS runtime
 
 ENV NODE_ENV=production
 ENV MASTRA_STUDIO_PATH=/app/studio
