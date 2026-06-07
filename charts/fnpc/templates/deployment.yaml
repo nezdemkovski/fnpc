@@ -30,17 +30,17 @@ spec:
             - name: POSTGRES_USERNAME
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.postgres.clusterName }}-owner
-                  key: username
+                  name: {{ .Values.postgres.credentialsSecret.name }}
+                  key: {{ .Values.postgres.credentialsSecret.usernameKey }}
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.postgres.clusterName }}-owner
-                  key: password
+                  name: {{ .Values.postgres.credentialsSecret.name }}
+                  key: {{ .Values.postgres.credentialsSecret.passwordKey }}
             - name: POSTGRES_HOST
-              value: "{{ .Values.postgres.clusterName }}-rw.{{ .Release.Namespace }}.svc.cluster.local"
+              value: {{ .Values.postgres.host | quote }}
             - name: POSTGRES_PORT
-              value: "5432"
+              value: {{ .Values.postgres.port | quote }}
             - name: POSTGRES_DATABASE
               value: {{ .Values.postgres.database | quote }}
       {{- end }}
@@ -73,17 +73,17 @@ spec:
             - name: POSTGRES_USERNAME
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.postgres.clusterName }}-owner
-                  key: username
+                  name: {{ .Values.postgres.credentialsSecret.name }}
+                  key: {{ .Values.postgres.credentialsSecret.usernameKey }}
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.postgres.clusterName }}-owner
-                  key: password
+                  name: {{ .Values.postgres.credentialsSecret.name }}
+                  key: {{ .Values.postgres.credentialsSecret.passwordKey }}
             - name: POSTGRES_HOST
-              value: "{{ .Values.postgres.clusterName }}-rw.{{ .Release.Namespace }}.svc.cluster.local"
+              value: {{ .Values.postgres.host | quote }}
             - name: POSTGRES_PORT
-              value: "5432"
+              value: {{ .Values.postgres.port | quote }}
             - name: POSTGRES_DATABASE
               value: {{ .Values.postgres.database | quote }}
             - name: ANTHROPIC_API_KEY

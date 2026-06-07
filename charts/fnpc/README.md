@@ -2,9 +2,24 @@
 
 This chart deploys the FNPC Mastra service with:
 
-- CloudNativePG Postgres for application and Mastra state.
 - External Secrets backed by the `onepassword` ClusterSecretStore.
 - Optional ClickHouse observability storage for Mastra traces and metrics.
+
+## Postgres
+
+Postgres is external to this chart. Provide the host, database, and a Kubernetes
+Secret containing the username/password:
+
+```yaml
+postgres:
+  host: fnpc-postgres-rw.fnpc.svc.cluster.local
+  port: "5432"
+  database: fnpc
+  credentialsSecret:
+    name: fnpc-postgres-owner
+    usernameKey: username
+    passwordKey: password
+```
 
 ## Required 1Password Items
 
@@ -13,11 +28,6 @@ This chart deploys the FNPC Mastra service with:
 - `ANTHROPIC_API_KEY`
 - `TELEGRAM_BOT_TOKEN`
 - `AUTH_SESSION_SECRET`
-
-`fnpc-postgres`
-
-- `username`
-- `password`
 
 `fnpc-clickhouse`
 

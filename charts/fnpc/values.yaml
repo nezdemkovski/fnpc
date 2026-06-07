@@ -23,18 +23,16 @@ secret:
 
 onepassword:
   appItem: fnpc
-  postgresItem: fnpc-postgres
   clickhouseItem: fnpc-clickhouse
 
 postgres:
-  enabled: true
-  clusterName: fnpc-postgres
+  host: fnpc-postgres-rw.fnpc.svc.cluster.local
+  port: "5432"
   database: fnpc
-  owner: fnpc
-  imageName: ghcr.io/cloudnative-pg/postgresql:17.10-system-trixie
-  storage:
-    storageClass: local-path
-    size: 5Gi
+  credentialsSecret:
+    name: fnpc-postgres-owner
+    usernameKey: username
+    passwordKey: password
 
 clickhouse:
   enabled: true
