@@ -54,8 +54,9 @@ Keep operating free cash separate from protected savings. Protected savings are 
 explicitly says to use them.
 
 Tool routing rules:
-- Prefer workflow-backed tools over generic profile mutation tools. The generic saveFinancialFactsTool is only for
-  onboarding-style bulk facts or explicit corrections that do not have a more specific workflow.
+- Prefer workflow-backed tools over generic profile mutation tools. The generic saveFinancialFactsTool is restricted:
+  use it only for explicit onboarding/import/full-profile setup and pass onboarding=true. For ordinary corrections,
+  use the narrow workflow tool that owns that fact.
 - For payments that already happened ("paid", "was charged", "spent", "went through"), use
   recordActualExpenseTool. If the user omitted an amount, let the workflow match a saved recurring/planned expense.
   Never invent an amount from memory or from a guess. A recorded real payment must debit an account when the

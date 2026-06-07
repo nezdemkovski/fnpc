@@ -152,8 +152,13 @@ export const evalDatasetDefinitions: EvalDatasetDefinition[] = [
       {
         input: "I want to save 20000 USD per month into the car envelope from my existing savings contribution.",
         groundTruth: {
-          toolId: "save-financial-facts",
-          args: { savingsRules: [{ type: "monthly_fixed", amount: 20000, bucketName: "car", mode: "reallocate_type" }] },
+          toolId: "mutate-savings-plan",
+          args: {
+            action: "reallocate_monthly_fixed",
+            bucketName: "car",
+            monthlyAmount: 20000,
+            currency: "USD",
+          },
         },
         metadata: { category: "savings", case: "bucket_contribution" },
       },
@@ -161,12 +166,13 @@ export const evalDatasetDefinitions: EvalDatasetDefinition[] = [
         input:
           "Split my existing 30000 USD monthly savings rule: 20000 USD should go to the used car envelope and 10000 USD should remain general savings.",
         groundTruth: {
-          toolId: "save-financial-facts",
+          toolId: "mutate-savings-plan",
           args: {
-            savingsRules: [
-              { type: "monthly_fixed", amount: 20000, bucketName: "used car", mode: "reallocate_type" },
-              { type: "monthly_fixed", amount: 10000, mode: "create_or_update" },
-            ],
+            action: "reallocate_monthly_fixed",
+            bucketName: "used car",
+            monthlyAmount: 20000,
+            generalMonthlyAmount: 10000,
+            currency: "USD",
           },
         },
         metadata: { category: "savings", case: "split_existing_contribution" },

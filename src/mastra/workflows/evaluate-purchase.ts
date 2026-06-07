@@ -1,16 +1,15 @@
 import { createStep, createWorkflow } from "@mastra/core/workflows";
 import { z } from "zod";
 import {
-  currentDateKey,
   currentMonthKey,
   parseUserDate,
 } from "../../finance/dates";
 import { formatMoney, majorToMinor } from "../../finance/money";
 import {
-  getOrCreateUser,
   runForecast,
   type ForecastResult,
 } from "../../finance/profile-service";
+import { buildForecastImpact, loadUserContext } from "./shared";
 
 const forecastRowSchema = z.object({
   month: z.string(),
@@ -111,16 +110,6 @@ const purchaseDecisionInputSchema = z.object({
 type PurchaseDecisionData = z.infer<typeof purchaseDecisionDataSchema>;
 type PurchaseDecisionOutput = z.infer<typeof purchaseDecisionOutputSchema>;
 
-const missingProfileSettings = (user: {
-  defaultCurrency?: string | null;
-  timezone?: string | null;
-}) => {
-  const missing: string[] = [];
-  if (!user.defaultCurrency) missing.push("defaultCurrency");
-  if (!user.timezone) missing.push("timezone");
-  return missing;
-};
-
 const summarizeForecast = (forecast: ForecastResult) => ({
   startMonth: forecast.startMonth,
   horizonMonths: forecast.horizonMonths,
@@ -150,25 +139,22 @@ const loadPurchaseProfileStep = createStep({
   inputSchema: purchaseDecisionInputSchema,
   outputSchema: purchaseDecisionDataSchema,
   execute: async ({ inputData }) => {
-    const user = await getOrCreateUser({
-      mastraResourceId: inputData.mastraResourceId,
-    });
-    const missingProfileFields = missingProfileSettings(user);
+    const context = await loadUserContext(inputData.mastraResourceId);
 
-    if (missingProfileFields.length > 0) {
+    if (context.missingProfileFields.length > 0) {
       return {
         ok: false,
         mastraResourceId: inputData.mastraResourceId,
-        missingProfileFields,
-        currentDate: user.timezone ? currentDateKey(user.timezone) : null,
-        currentMonth: user.timezone ? currentMonthKey(user.timezone) : null,
+        missingProfileFields: context.missingProfileFields,
+        currentDate: context.currentDate,
+        currentMonth: context.currentMonth,
         message:
           "Cannot evaluate a purchase until defaultCurrency and timezone are known.",
       };
     }
 
-    const currency = user.defaultCurrency;
-    const timezone = user.timezone;
+    const currency = context.currency;
+    const timezone = context.timezone;
     if (!currency || !timezone)
       throw new Error("Profile settings guard failed");
 
@@ -179,9 +165,9 @@ const loadPurchaseProfileStep = createStep({
       ok: true,
       mastraResourceId: inputData.mastraResourceId,
       missingProfileFields: [],
-      currentDate: currentDateKey(timezone),
+      currentDate: context.currentDate,
       currentMonth: currentMonthKey(timezone),
-      userId: user.id,
+      userId: context.userId,
       currency,
       timezone,
       scenario: {
@@ -275,6 +261,11 @@ const buildPurchaseDecisionStep = createStep({
     }
     const currency = inputData.currency;
 
+    const impact = buildForecastImpact({
+      before: inputData.baseline,
+      after: inputData.scenarioForecast,
+      currency,
+    });
     const baselineByMonth = new Map(
       inputData.baseline.rows.map((row) => [row.month, row]),
     );
@@ -286,8 +277,7 @@ const buildPurchaseDecisionStep = createStep({
       : undefined;
 
     const minimumFreeCashDeltaMinor =
-      inputData.scenarioForecast.minimumFreeCashMinor -
-      inputData.baseline.minimumFreeCashMinor;
+      impact.minimumFreeCashDeltaMinor;
     const purchaseMonthClosingDeltaMinor =
       purchaseMonthBaselineRow && purchaseMonthScenarioRow
         ? purchaseMonthScenarioRow.closingFreeCashMinor -
@@ -345,10 +335,7 @@ const buildPurchaseDecisionStep = createStep({
       impact: {
         minimumFreeCashDeltaMinor,
         purchaseMonthClosingDeltaMinor,
-        formattedMinimumFreeCashDelta: formatMoney(
-          minimumFreeCashDeltaMinor,
-          currency,
-        ),
+        formattedMinimumFreeCashDelta: impact.formattedMinimumFreeCashDelta,
         formattedPurchaseMonthClosingDelta: formatMoney(
           purchaseMonthClosingDeltaMinor,
           currency,

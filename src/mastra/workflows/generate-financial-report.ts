@@ -1,9 +1,9 @@
 import { format } from "date-fns";
 import { createStep, createWorkflow } from "@mastra/core/workflows";
 import { z } from "zod";
-import { currentDateKey, currentMonthKey } from "../../finance/dates";
 import { formatMoney } from "../../finance/money";
-import { getFinancialSnapshot, getOrCreateUser, runForecast } from "../../finance/profile-service";
+import { getFinancialSnapshot, runForecast } from "../../finance/profile-service";
+import { loadUserContext } from "./shared";
 
 const reportTypeSchema = z.enum(["daily", "weekly", "monthly", "forecast"]);
 
@@ -87,30 +87,22 @@ const reportOutputSchema = z.object({
     .optional(),
 });
 
-const missingProfileSettings = (user: { defaultCurrency?: string | null; timezone?: string | null }) => {
-  const missing: string[] = [];
-  if (!user.defaultCurrency) missing.push("defaultCurrency");
-  if (!user.timezone) missing.push("timezone");
-  return missing;
-};
-
 const loadReportProfileStep = createStep({
   id: "load-report-profile",
   description: "Loads the profile and verifies settings required for report calculations.",
   inputSchema: reportInputSchema,
   outputSchema: reportOutputSchema,
   execute: async ({ inputData }) => {
-    const user = await getOrCreateUser({ mastraResourceId: inputData.mastraResourceId });
-    const missingProfileFields = missingProfileSettings(user);
+    const context = await loadUserContext(inputData.mastraResourceId);
 
-    if (missingProfileFields.length > 0) {
+    if (context.missingProfileFields.length > 0) {
       return {
         ok: false,
         mastraResourceId: inputData.mastraResourceId,
         reportType: inputData.reportType,
-        missingProfileFields,
-        currentDate: user.timezone ? currentDateKey(user.timezone) : null,
-        currentMonth: user.timezone ? currentMonthKey(user.timezone) : null,
+        missingProfileFields: context.missingProfileFields,
+        currentDate: context.currentDate,
+        currentMonth: context.currentMonth,
         upcomingPlans: [],
         message: "Cannot generate a financial report until defaultCurrency and timezone are known.",
       };
@@ -121,11 +113,11 @@ const loadReportProfileStep = createStep({
       mastraResourceId: inputData.mastraResourceId,
       reportType: inputData.reportType,
       missingProfileFields: [],
-      currentDate: currentDateKey(user.timezone!),
-      currentMonth: currentMonthKey(user.timezone!),
-      userId: user.id,
-      currency: user.defaultCurrency!,
-      timezone: user.timezone!,
+      currentDate: context.currentDate,
+      currentMonth: context.currentMonth,
+      userId: context.userId,
+      currency: context.currency!,
+      timezone: context.timezone!,
       upcomingPlans: [],
     };
   },

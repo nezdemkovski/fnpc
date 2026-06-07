@@ -1,8 +1,6 @@
 import { createTool } from "@mastra/core/tools";
-import type { ToolExecutionContext } from "@mastra/core/tools";
 import { z } from "zod";
 import {
-  currentDateKey,
   currentMonthKey,
   parseUserDate,
 } from "../../finance/dates";
@@ -16,29 +14,10 @@ import {
   getUserProfile,
   updateUserPreferences,
 } from "../../finance/user-preferences";
+import { currentContext, missingProfileSettings } from "../workflows/shared";
 import { updateFinancialProfile } from "../workflows/update-financial-profile";
 import { financialFactsPatchSchema } from "./financial-profile-schemas";
-
-const resourceIdFromContext = (context?: ToolExecutionContext) =>
-  context?.agent?.resourceId;
-
-type ProfileSettings = {
-  defaultCurrency?: string | null;
-  timezone?: string | null;
-};
-
-const missingProfileSettings = (user: ProfileSettings) => {
-  const missing: string[] = [];
-  if (!user.defaultCurrency) missing.push("defaultCurrency");
-  if (!user.timezone) missing.push("timezone");
-  return missing;
-};
-
-const currentContext = (settings: ProfileSettings) => ({
-  currentDate: settings.timezone ? currentDateKey(settings.timezone) : null,
-  currentMonth: settings.timezone ? currentMonthKey(settings.timezone) : null,
-  missingProfileFields: missingProfileSettings(settings),
-});
+import { resourceIdFromContext } from "./source-context";
 
 const userPreferencesSchema = z.object({
   preferredName: z.string().optional(),
@@ -53,8 +32,14 @@ const userPreferencesSchema = z.object({
 export const saveFinancialFactsTool = createTool({
   id: "save-financial-facts",
   description:
-    "Create, update, or deactivate the user's durable financial profile from explicit user-provided facts.",
+    "Restricted onboarding/import tool. Use only when the user explicitly provides a full profile or asks to import/setup many durable financial facts at once. For normal updates use specific workflow-backed tools.",
   inputSchema: financialFactsPatchSchema.extend({
+    onboarding: z
+      .literal(true)
+      .optional()
+      .describe(
+        "Required. Set true only for explicit onboarding/import/full-profile setup.",
+      ),
     mastraResourceId: z
       .string()
       .optional()
@@ -65,6 +50,21 @@ export const saveFinancialFactsTool = createTool({
       resourceIdFromContext(context) ?? input.mastraResourceId;
     if (!mastraResourceId)
       return { ok: false, missingInputs: ["mastraResourceId"] };
+    if (input.onboarding !== true) {
+      return {
+        ok: false,
+        message:
+          "save-financial-facts is restricted to explicit onboarding/import. Use a specific workflow tool for ordinary changes.",
+        allowedTools: [
+          "update-account-balance",
+          "mutate-recurring-expense",
+          "mutate-planned-expense",
+          "record-actual-expense",
+          "mutate-savings-plan",
+          "transfer-to-savings",
+        ],
+      };
+    }
 
     const workflow =
       context.mastra?.getWorkflow("updateFinancialProfile") ??

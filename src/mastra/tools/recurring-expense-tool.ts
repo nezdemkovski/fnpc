@@ -1,43 +1,11 @@
 import { createTool } from "@mastra/core/tools";
-import type { ToolExecutionContext } from "@mastra/core/tools";
 import { z } from "zod";
 import { mutateRecurringExpense } from "../workflows/mutate-recurring-expense";
-
-const resourceIdFromContext = (context?: ToolExecutionContext) =>
-  context?.agent?.resourceId;
-
-const latestUserMessageFromContext = (context?: ToolExecutionContext) => {
-  const messages = context?.agent?.messages;
-  if (!Array.isArray(messages)) return undefined;
-
-  for (const message of [...messages].reverse()) {
-    if (message?.role !== "user") continue;
-    const content = message.content;
-    if (typeof content === "string") return content;
-    if (!Array.isArray(content)) continue;
-    const text = content
-      .map((part) => (part?.type === "text" ? part.text : ""))
-      .filter(Boolean)
-      .join("\n")
-      .trim();
-    if (text.length > 0) return text;
-  }
-
-  return undefined;
-};
-
-const latestTelegramMessageIdFromContext = (context?: ToolExecutionContext) => {
-  const messages = context?.agent?.messages;
-  if (!Array.isArray(messages)) return undefined;
-
-  for (const message of [...messages].reverse()) {
-    const metadata = message?.providerMetadata ?? message?.experimental_providerMetadata;
-    const telegram = metadata?.mastra?.channels?.telegram;
-    if (typeof telegram?.messageId === "string") return telegram.messageId;
-  }
-
-  return undefined;
-};
+import {
+  latestTelegramMessageIdFromContext,
+  latestUserMessageFromContext,
+  resourceIdFromContext,
+} from "./source-context";
 
 export const mutateRecurringExpenseTool = createTool({
   id: "mutate-recurring-expense",

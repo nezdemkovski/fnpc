@@ -1,10 +1,7 @@
 import { createTool } from "@mastra/core/tools";
-import type { ToolExecutionContext } from "@mastra/core/tools";
 import { z } from "zod";
 import { explainFinancialFact } from "../workflows/explain-financial-fact";
-
-const resourceIdFromContext = (context?: ToolExecutionContext) =>
-  context?.agent?.resourceId;
+import { resourceIdFromContext } from "./source-context";
 
 export const explainFinancialFactTool = createTool({
   id: "explain-financial-fact",
