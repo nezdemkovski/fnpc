@@ -18,6 +18,7 @@ import { mutatePlannedExpenseTool } from "../tools/planned-expense-tool";
 import { evaluatePurchaseTool } from "../tools/purchase-decision-tool";
 import { mutateRecurringExpenseTool } from "../tools/recurring-expense-tool";
 import { mutateSavingsPlanTool } from "../tools/savings-plan-tool";
+import { transferToSavingsTool } from "../tools/transfer-to-savings-tool";
 
 const userMemorySchema = z.object({
   preferredName: z.string().optional(),
@@ -77,6 +78,9 @@ Tool routing rules:
   mutateRecurringExpenseTool with action "record_payment" so the saved recurring amount is reused.
 - For savings buckets/envelopes, goal contributions, and reallocating existing monthly savings, use
   mutateSavingsPlanTool instead of the generic saveFinancialFactsTool.
+- For actual money movement involving savings buckets ("moved money to savings", "put into envelope",
+  "took money from savings", "bought it from the bucket", "close this bucket"), use transferToSavingsTool.
+  Do not model these as new accounts or as new savings rules.
 - For "where did this come from", "how did you calculate this", "what did I say before", memory, provenance,
   or suspected hallucination questions, use explainFinancialFactTool. Summarize the returned evidence and say
   when no evidence exists. Do not invent missing provenance.
@@ -126,6 +130,7 @@ export const financialAgent = new Agent({
     mutatePlannedExpenseTool,
     mutateRecurringExpenseTool,
     mutateSavingsPlanTool,
+    transferToSavingsTool,
   },
   channels:
     env.telegramAdapterMode === "off"

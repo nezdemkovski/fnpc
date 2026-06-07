@@ -118,6 +118,22 @@ export const evalDatasetDefinitions: EvalDatasetDefinition[] = [
         metadata: { category: "balance", case: "protected_savings_bucket" },
       },
       {
+        input: "Move 500 USD into the reserve envelope.",
+        groundTruth: {
+          toolId: "transfer-to-savings",
+          args: { action: "transfer_to_bucket", bucketName: "reserve", amount: 500, currency: "USD" },
+        },
+        metadata: { category: "savings_transfer", case: "transfer_to_bucket" },
+      },
+      {
+        input: "I bought the bike from the reserve envelope for 900 USD.",
+        groundTruth: {
+          toolId: "transfer-to-savings",
+          args: { action: "spend_from_bucket", bucketName: "reserve", expenseName: "bike", amount: 900, currency: "USD" },
+        },
+        metadata: { category: "savings_transfer", case: "spend_from_bucket" },
+      },
+      {
         input: "How much free operating cash do I have right now?",
         groundTruth: {
           toolId: "get-financial-snapshot",
@@ -524,6 +540,75 @@ export const evalDatasetDefinitions: EvalDatasetDefinition[] = [
           },
         },
         metadata: { category: "workflow", case: "protected_savings_bucket_balance" },
+      },
+    ],
+  },
+  {
+    name: "fnpc-savings-transfer-workflow",
+    description:
+      "Synthetic workflow inputs for transferToSavings. Checks moving money into protected buckets and spending from a bucket without creating fake accounts.",
+    targetType: "workflow",
+    targetIds: ["transferToSavings"],
+    inputSchema: workflowInputSchema,
+    groundTruthSchema: workflowGroundTruthSchema,
+    items: [
+      {
+        input: {
+          mastraResourceId: "eval:transfer:to-bucket",
+          action: "transfer_to_bucket",
+          bucketName: "reserve",
+          amount: 500,
+          currency: "USD",
+        },
+        groundTruth: {
+          ok: true,
+          expectations: {
+            bucketIncreases: true,
+            doesNotCreateAccount: true,
+            availableOperatingCashDecreases: true,
+          },
+        },
+        metadata: { category: "workflow", case: "transfer_to_bucket" },
+      },
+      {
+        input: {
+          mastraResourceId: "eval:transfer:from-bucket",
+          action: "transfer_from_bucket",
+          bucketName: "reserve",
+          accountName: "Operating account",
+          amount: 300,
+          currency: "USD",
+          asOf: "2026-06-02",
+        },
+        groundTruth: {
+          ok: true,
+          expectations: {
+            bucketDecreases: true,
+            accountBalanceAdjusts: true,
+          },
+        },
+        metadata: { category: "workflow", case: "transfer_from_bucket" },
+      },
+      {
+        input: {
+          mastraResourceId: "eval:transfer:spend-bucket",
+          action: "spend_from_bucket",
+          bucketName: "reserve",
+          accountName: "Operating account",
+          expenseName: "bike",
+          amount: 900,
+          currency: "USD",
+          spentAt: "2026-06-02",
+        },
+        groundTruth: {
+          ok: true,
+          expectations: {
+            bucketDecreases: true,
+            actualExpenseCreated: true,
+            accountBalanceDecreases: true,
+          },
+        },
+        metadata: { category: "workflow", case: "spend_from_bucket" },
       },
     ],
   },
