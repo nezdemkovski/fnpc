@@ -11,8 +11,6 @@ on:
       - scripts/**
       - Dockerfile
       - .dockerignore
-      - charts/fnpc/Chart.yaml
-      - .github/workflows/publish-image.yml
 
 permissions:
   contents: read
@@ -51,9 +49,9 @@ jobs:
           password: ${{ github.token }}
 
       - name: Read app version
-        id: chart
+        id: app
         run: |
-          app_version="$(grep '^appVersion:' charts/fnpc/Chart.yaml | sed -E 's/appVersion:[[:space:]]*"?([^"]+)"?/\1/')"
+          app_version="$(bun -p "require('./package.json').version")"
           echo "app_version=$app_version" >> "$GITHUB_OUTPUT"
 
       - name: Build and push image
@@ -61,4 +59,4 @@ jobs:
         with:
           context: .
           push: true
-          tags: ghcr.io/nezdemkovski/fnpc:${{ steps.chart.outputs.app_version }}
+          tags: ghcr.io/nezdemkovski/fnpc:${{ steps.app.outputs.app_version }}
