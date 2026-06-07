@@ -20,12 +20,16 @@ spec:
         {{- include "fnpc.labels" . | nindent 8 }}
         app.kubernetes.io/component: app
     spec:
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
       {{- if .Values.migrations.enabled }}
       initContainers:
         - name: db-migrate
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command: ["node", "migrate.mjs"]
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
           env:
             - name: POSTGRES_USERNAME
               valueFrom:
@@ -48,6 +52,8 @@ spec:
         - name: fnpc
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
           env:
             - name: PORT
               value: {{ .Values.env.port | quote }}
