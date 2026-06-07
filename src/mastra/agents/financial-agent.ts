@@ -15,6 +15,7 @@ import { recordActualExpenseTool } from "../tools/actual-expense-tool";
 import { generateFinancialReportTool } from "../tools/financial-report-tool";
 import { mutatePlannedExpenseTool } from "../tools/planned-expense-tool";
 import { evaluatePurchaseTool } from "../tools/purchase-decision-tool";
+import { mutateRecurringExpenseTool } from "../tools/recurring-expense-tool";
 import { mutateSavingsPlanTool } from "../tools/savings-plan-tool";
 
 const userMemorySchema = z.object({
@@ -64,6 +65,11 @@ Tool routing rules:
 - For reports like "what's the money situation", daily/weekly/monthly summaries, or forecast tables, use
   generateFinancialReportTool.
 - For creating, moving, cancelling, approving, or marking planned expenses paid, use mutatePlannedExpenseTool.
+- For recurring expenses such as rent, subscriptions, utilities, memberships, or any "I pay this every month"
+  item, use mutateRecurringExpenseTool to create, update, delete/deactivate, or record payment. Do not use
+  the generic saveFinancialFactsTool for one-off recurring expense changes.
+- If the user says a saved recurring expense was paid/charged/went through and no amount is provided, use
+  mutateRecurringExpenseTool with action "record_payment" so the saved recurring amount is reused.
 - For savings buckets/envelopes, goal contributions, and reallocating existing monthly savings, use
   mutateSavingsPlanTool instead of the generic saveFinancialFactsTool.
 - For "where did this come from", "how did you calculate this", "what did I say before", memory, provenance,
@@ -112,6 +118,7 @@ export const financialAgent = new Agent({
     evaluatePurchaseTool,
     generateFinancialReportTool,
     mutatePlannedExpenseTool,
+    mutateRecurringExpenseTool,
     mutateSavingsPlanTool,
   },
   channels:

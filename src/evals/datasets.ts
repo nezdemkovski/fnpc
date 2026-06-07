@@ -94,6 +94,14 @@ export const evalDatasetDefinitions: EvalDatasetDefinition[] = [
         metadata: { category: "provenance", case: "explain_saved_fact" },
       },
       {
+        input: "The coworking membership was charged.",
+        groundTruth: {
+          toolId: "mutate-recurring-expense",
+          args: { action: "record_payment", name: "coworking membership" },
+        },
+        metadata: { category: "recurring_expense", case: "record_payment_without_amount" },
+      },
+      {
         input: "How much free operating cash do I have right now?",
         groundTruth: {
           toolId: "get-financial-snapshot",
@@ -368,6 +376,69 @@ export const evalDatasetDefinitions: EvalDatasetDefinition[] = [
           },
         },
         metadata: { category: "workflow", case: "missing_evidence" },
+      },
+    ],
+  },
+  {
+    name: "fnpc-recurring-expense-workflow",
+    description:
+      "Synthetic workflow inputs for mutateRecurringExpense. Checks update, delete, and recording a recurring payment without creating duplicate recurring facts.",
+    targetType: "workflow",
+    targetIds: ["mutateRecurringExpense"],
+    inputSchema: workflowInputSchema,
+    groundTruthSchema: workflowGroundTruthSchema,
+    items: [
+      {
+        input: {
+          mastraResourceId: "eval:recurring:update",
+          action: "update",
+          name: "coworking membership",
+          amount: 325,
+          horizonMonths: 3,
+        },
+        groundTruth: {
+          ok: true,
+          changed: { entityType: "recurring_expense", action: "updated", name: "coworking membership" },
+          expectations: {
+            amount: 325,
+            doesNotCreateDuplicate: true,
+          },
+        },
+        metadata: { category: "workflow", case: "update_existing_recurring" },
+      },
+      {
+        input: {
+          mastraResourceId: "eval:recurring:delete",
+          action: "delete",
+          name: "coworking membership",
+          horizonMonths: 3,
+        },
+        groundTruth: {
+          ok: true,
+          changed: { entityType: "recurring_expense", action: "deleted", name: "coworking membership" },
+          expectations: {
+            afterInactive: true,
+          },
+        },
+        metadata: { category: "workflow", case: "delete_existing_recurring" },
+      },
+      {
+        input: {
+          mastraResourceId: "eval:recurring:payment",
+          action: "record_payment",
+          name: "coworking was charged",
+          spentAt: "2026-06-02",
+          sourceMessageId: "eval-message:recurring-payment",
+        },
+        groundTruth: {
+          ok: true,
+          changed: { entityType: "actual_expense", action: "paid", name: "coworking membership" },
+          expectations: {
+            amountTakenFromRecurring: true,
+            doesNotCreateRecurringExpense: true,
+          },
+        },
+        metadata: { category: "workflow", case: "record_payment_without_amount" },
       },
     ],
   },

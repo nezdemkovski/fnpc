@@ -9,6 +9,7 @@ import { evaluatePurchase } from "./workflows/evaluate-purchase";
 import { explainFinancialFact } from "./workflows/explain-financial-fact";
 import { generateFinancialReport } from "./workflows/generate-financial-report";
 import { mutatePlannedExpense } from "./workflows/mutate-planned-expense";
+import { mutateRecurringExpense } from "./workflows/mutate-recurring-expense";
 import { mutateSavingsPlan } from "./workflows/mutate-savings-plan";
 import { recordActualExpense } from "./workflows/record-actual-expense";
 import { updateFinancialProfile } from "./workflows/update-financial-profile";
@@ -40,6 +41,7 @@ export const mastra = new Mastra({
     explainFinancialFact,
     generateFinancialReport,
     mutatePlannedExpense,
+    mutateRecurringExpense,
     mutateSavingsPlan,
     recordActualExpense,
     updateFinancialProfile,

@@ -96,6 +96,18 @@ export const resetWorkflowEvalFixtures = async (definitions: EvalDatasetDefiniti
       });
     }
 
+    if (user.mastraResourceId?.startsWith("eval:recurring:")) {
+      await db.insert(recurringExpenses).values({
+        userId: user.id,
+        name: "coworking membership",
+        amountMinor: 300_00,
+        currency: "USD",
+        frequency: "monthly",
+        dayOfMonth: 3,
+        isEssential: false,
+      });
+    }
+
     if (user.mastraResourceId === "eval:explain:recurring-event") {
       const [recurringExpense] = await db
         .insert(recurringExpenses)
