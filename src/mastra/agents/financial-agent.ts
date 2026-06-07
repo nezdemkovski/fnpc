@@ -4,6 +4,7 @@ import { Memory } from "@mastra/memory";
 import { z } from "zod";
 import { env } from "../../config/env";
 import { RuntimeProfileProcessor } from "../processors/runtime-profile-processor";
+import { updateAccountBalanceTool } from "../tools/account-balance-tool";
 import { explainFinancialFactTool } from "../tools/explain-financial-fact-tool";
 import {
   getFinancialSnapshotTool,
@@ -57,6 +58,10 @@ Tool routing rules:
 - For payments that already happened ("paid", "was charged", "spent", "went through"), use
   recordActualExpenseTool. If the user omitted an amount, let the workflow match a saved recurring/planned expense.
   Never invent an amount from memory or from a guess.
+- For reported balances like "I have 225000 on my account", "cash is 10000", or "savings are 42000", use
+  updateAccountBalanceTool. Use targetType "account" for checking/cash/bank account balances. Use targetType
+  "savings_bucket" for protected savings, envelopes, reserves, or money that must be excluded from free cash.
+  Do not store protected savings as a spendable account balance unless the user explicitly means a bank account.
 - For "how much is free now", "current free money", "on hand", or similar current-state questions, use
   getFinancialSnapshotTool and answer from availableOperatingCash. Do not answer with end-of-month forecast
   unless the user explicitly asks for forecast, end of month, next salary, or future months.
@@ -110,6 +115,7 @@ export const financialAgent = new Agent({
   inputProcessors: [new RuntimeProfileProcessor()],
   tools: {
     saveFinancialFactsTool,
+    updateAccountBalanceTool,
     explainFinancialFactTool,
     recordActualExpenseTool,
     updateUserPreferencesTool,

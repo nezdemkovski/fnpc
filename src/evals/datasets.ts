@@ -102,6 +102,22 @@ export const evalDatasetDefinitions: EvalDatasetDefinition[] = [
         metadata: { category: "recurring_expense", case: "record_payment_without_amount" },
       },
       {
+        input: "My operating account balance is 4200 USD.",
+        groundTruth: {
+          toolId: "update-account-balance",
+          args: { targetType: "account", accountName: "Operating account", amount: 4200, currency: "USD" },
+        },
+        metadata: { category: "balance", case: "operating_account" },
+      },
+      {
+        input: "Protected savings are 1200 USD now.",
+        groundTruth: {
+          toolId: "update-account-balance",
+          args: { targetType: "savings_bucket", amount: 1200, currency: "USD", isProtected: true },
+        },
+        metadata: { category: "balance", case: "protected_savings_bucket" },
+      },
+      {
         input: "How much free operating cash do I have right now?",
         groundTruth: {
           toolId: "get-financial-snapshot",
@@ -439,6 +455,75 @@ export const evalDatasetDefinitions: EvalDatasetDefinition[] = [
           },
         },
         metadata: { category: "workflow", case: "record_payment_without_amount" },
+      },
+    ],
+  },
+  {
+    name: "fnpc-account-balance-workflow",
+    description:
+      "Synthetic workflow inputs for updateAccountBalance. Checks that account balances and protected savings buckets are updated as separate concepts.",
+    targetType: "workflow",
+    targetIds: ["updateAccountBalance"],
+    inputSchema: workflowInputSchema,
+    groundTruthSchema: workflowGroundTruthSchema,
+    items: [
+      {
+        input: {
+          mastraResourceId: "eval:balance:operating",
+          targetType: "account",
+          accountName: "Operating account",
+          accountType: "checking",
+          amount: 4200,
+          currency: "USD",
+          asOf: "2026-06-02",
+        },
+        groundTruth: {
+          ok: true,
+          changed: { entityType: "account_balance", action: "created", name: "Operating account" },
+          expectations: {
+            totalCashUpdates: true,
+            protectedSavingsUnchanged: true,
+          },
+        },
+        metadata: { category: "workflow", case: "operating_account_balance" },
+      },
+      {
+        input: {
+          mastraResourceId: "eval:balance:cash",
+          targetType: "account",
+          accountName: "Cash",
+          accountType: "cash",
+          amount: 350,
+          currency: "USD",
+          asOf: "2026-06-02",
+        },
+        groundTruth: {
+          ok: true,
+          changed: { entityType: "account_balance", action: "created", name: "Cash" },
+          expectations: {
+            createsCashAccountWhenMissing: true,
+          },
+        },
+        metadata: { category: "workflow", case: "cash_balance" },
+      },
+      {
+        input: {
+          mastraResourceId: "eval:balance:protected-savings",
+          targetType: "savings_bucket",
+          bucketName: "reserve",
+          amount: 1200,
+          currency: "USD",
+          isProtected: true,
+        },
+        groundTruth: {
+          ok: true,
+          changed: { entityType: "savings_bucket", action: "updated", name: "reserve" },
+          expectations: {
+            protectedSavingsUpdates: true,
+            doesNotCreateSpendableAccount: true,
+          },
+        },
+        metadata: { category: "workflow", case: "protected_savings_bucket_balance" },
       },
     ],
   },

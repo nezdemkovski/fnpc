@@ -12,6 +12,7 @@ import { mutatePlannedExpense } from "./workflows/mutate-planned-expense";
 import { mutateRecurringExpense } from "./workflows/mutate-recurring-expense";
 import { mutateSavingsPlan } from "./workflows/mutate-savings-plan";
 import { recordActualExpense } from "./workflows/record-actual-expense";
+import { updateAccountBalance } from "./workflows/update-account-balance";
 import { updateFinancialProfile } from "./workflows/update-financial-profile";
 import { MastraAuthRealm } from "./auth/shared-auth-provider";
 
@@ -44,6 +45,7 @@ export const mastra = new Mastra({
     mutateRecurringExpense,
     mutateSavingsPlan,
     recordActualExpense,
+    updateAccountBalance,
     updateFinancialProfile,
   },
   storage,
