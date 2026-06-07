@@ -1,4 +1,4 @@
-FROM oven/bun:1.3.14 AS build
+FROM oven/bun:1.3.14-alpine AS build
 
 WORKDIR /app
 
@@ -8,7 +8,7 @@ RUN bun install --frozen-lockfile
 COPY . .
 RUN bun run build
 
-FROM oven/bun:1.3.14 AS runtime
+FROM node:25-slim AS runtime
 
 ENV NODE_ENV=production
 ENV MASTRA_STUDIO_PATH=/app/studio
@@ -21,4 +21,4 @@ COPY --from=build /app/drizzle ./drizzle
 
 EXPOSE 4111
 
-CMD ["bun", "index.mjs"]
+CMD ["node", "index.mjs"]

@@ -25,7 +25,7 @@ spec:
         - name: db-migrate
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["bun", "migrate.mjs"]
+          command: ["node", "migrate.mjs"]
           env:
             - name: POSTGRES_USERNAME
               valueFrom:
