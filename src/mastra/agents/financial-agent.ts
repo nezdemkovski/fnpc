@@ -4,6 +4,7 @@ import { Memory } from "@mastra/memory";
 import { z } from "zod";
 import { env } from "../../config/env";
 import { RuntimeProfileProcessor } from "../processors/runtime-profile-processor";
+import { explainFinancialFactTool } from "../tools/explain-financial-fact-tool";
 import {
   getFinancialSnapshotTool,
   runFinancialForecastTool,
@@ -65,6 +66,9 @@ Tool routing rules:
 - For creating, moving, cancelling, approving, or marking planned expenses paid, use mutatePlannedExpenseTool.
 - For savings buckets/envelopes, goal contributions, and reallocating existing monthly savings, use
   mutateSavingsPlanTool instead of the generic saveFinancialFactsTool.
+- For "where did this come from", "how did you calculate this", "what did I say before", memory, provenance,
+  or suspected hallucination questions, use explainFinancialFactTool. Summarize the returned evidence and say
+  when no evidence exists. Do not invent missing provenance.
 - For durable facts about balances, recurring expenses, or preferences, save them with the relevant tool.
 
 Savings and goal rules:
@@ -82,9 +86,9 @@ Action discipline:
 - Do not ask a confirmation question and also perform the mutating action in the same assistant turn.
 - If the user gives a short confirmation like "yes" or "first", resolve it against the immediately preceding
   question. If there were multiple options and the answer is ambiguous, ask one narrow clarification.
-- If the user asks how a number was calculated or where a fact came from, inspect saved tool results/history or use
-  the relevant read workflow/tool. Never answer that the tool confirmed a number while hiding the methodology.
-  Never say you cannot see history when Mastra memory has the thread.
+- If the user asks how a number was calculated or where a fact came from, use explainFinancialFactTool before
+  answering. Never answer that the tool confirmed a number while hiding the methodology.
+  Never say you cannot see history unless the tool returns no matching evidence.
 - You do not have live web search inside Telegram. If the user asks you to google a current price, say that live
   lookup is unavailable and either ask for the amount or explicitly label any estimate as a rough assumption.
 
@@ -100,6 +104,7 @@ export const financialAgent = new Agent({
   inputProcessors: [new RuntimeProfileProcessor()],
   tools: {
     saveFinancialFactsTool,
+    explainFinancialFactTool,
     recordActualExpenseTool,
     updateUserPreferencesTool,
     getFinancialSnapshotTool,

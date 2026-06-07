@@ -3,6 +3,7 @@ import { db } from "../db/client";
 import {
   accountBalances,
   accounts,
+  financialEvents,
   incomeRules,
   plannedExpenses,
   recurringExpenses,
@@ -92,6 +93,32 @@ export const resetWorkflowEvalFixtures = async (definitions: EvalDatasetDefiniti
         frequency: "monthly",
         dayOfMonth: 2,
         isEssential: true,
+      });
+    }
+
+    if (user.mastraResourceId === "eval:explain:recurring-event") {
+      const [recurringExpense] = await db
+        .insert(recurringExpenses)
+        .values({
+          userId: user.id,
+          name: "internet service",
+          amountMinor: 75_00,
+          currency: "USD",
+          frequency: "monthly",
+          dayOfMonth: 2,
+          isEssential: true,
+        })
+        .returning();
+
+      await db.insert(financialEvents).values({
+        userId: user.id,
+        entityType: "recurring_expense",
+        entityId: recurringExpense.id,
+        eventType: "created",
+        after: recurringExpense,
+        reason:
+          '{"source":"eval-fixture","sourceText":"internet service costs 75 USD per month"}',
+        sourceMessageId: "eval-message:internet-service",
       });
     }
 

@@ -80,10 +80,18 @@ export const evalDatasetDefinitions: EvalDatasetDefinition[] = [
       {
         input: "I spent 850 USD on a keyboard repair today.",
         groundTruth: {
-          toolId: "save-financial-facts",
-          args: { actualExpenses: [{ name: "keyboard repair", amount: 850, currency: "USD" }] },
+          toolId: "record-actual-expense",
+          args: { name: "keyboard repair", amount: 850, currency: "USD" },
         },
         metadata: { category: "actual_expense", case: "record" },
+      },
+      {
+        input: "Where did the internet bill amount come from?",
+        groundTruth: {
+          toolId: "explain-financial-fact",
+          args: { query: "internet bill" },
+        },
+        metadata: { category: "provenance", case: "explain_saved_fact" },
       },
       {
         input: "How much free operating cash do I have right now?",
@@ -317,6 +325,49 @@ export const evalDatasetDefinitions: EvalDatasetDefinition[] = [
           },
         },
         metadata: { category: "workflow", case: "match_recurring_without_amount" },
+      },
+    ],
+  },
+  {
+    name: "fnpc-explain-fact-workflow",
+    description:
+      "Synthetic workflow inputs for explainFinancialFact. Checks that saved event provenance can be retrieved instead of guessed.",
+    targetType: "workflow",
+    targetIds: ["explainFinancialFact"],
+    inputSchema: workflowInputSchema,
+    groundTruthSchema: workflowGroundTruthSchema,
+    items: [
+      {
+        input: {
+          mastraResourceId: "eval:explain:recurring-event",
+          query: "internet service",
+          entityName: "internet service",
+          limit: 5,
+        },
+        groundTruth: {
+          ok: true,
+          expectations: {
+            hasEvidence: true,
+            sourceIncludesFinancialEvent: true,
+            doesNotHallucinateMissingHistory: true,
+          },
+        },
+        metadata: { category: "workflow", case: "explain_financial_event" },
+      },
+      {
+        input: {
+          mastraResourceId: "eval:explain:no-evidence",
+          query: "nonexistent camera drone",
+          limit: 5,
+        },
+        groundTruth: {
+          ok: true,
+          expectations: {
+            missingEvidence: true,
+            noInventedFacts: true,
+          },
+        },
+        metadata: { category: "workflow", case: "missing_evidence" },
       },
     ],
   },

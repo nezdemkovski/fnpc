@@ -6,6 +6,7 @@ import { PostgresStore } from "@mastra/pg";
 import { env } from "../config/env";
 import { financialAgent } from "./agents/financial-agent";
 import { evaluatePurchase } from "./workflows/evaluate-purchase";
+import { explainFinancialFact } from "./workflows/explain-financial-fact";
 import { generateFinancialReport } from "./workflows/generate-financial-report";
 import { mutatePlannedExpense } from "./workflows/mutate-planned-expense";
 import { mutateSavingsPlan } from "./workflows/mutate-savings-plan";
@@ -36,6 +37,7 @@ export const mastra = new Mastra({
   agents: { financialAgent },
   workflows: {
     evaluatePurchase,
+    explainFinancialFact,
     generateFinancialReport,
     mutatePlannedExpense,
     mutateSavingsPlan,
