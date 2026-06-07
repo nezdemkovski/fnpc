@@ -6,6 +6,7 @@ import {
   actualExpenses,
   forecastRunItems,
   forecastRuns,
+  incomeEvents,
   incomeRules,
   plannedExpenses,
   recurringExpenses,
@@ -58,6 +59,52 @@ const riskLevel = (closingFreeCashMinor: number): ForecastRow["riskLevel"] => {
   if (closingFreeCashMinor < 0) return "negative";
   if (closingFreeCashMinor < 50_000_00) return "tight";
   return "ok";
+};
+
+const clampDayOfMonth = (monthStartDate: Date, day: number): number =>
+  Math.min(Math.max(day, 1), new Date(Date.UTC(monthStartDate.getUTCFullYear(), monthStartDate.getUTCMonth() + 1, 0)).getUTCDate());
+
+const dateInMonth = (monthStartDate: Date, day: number): Date =>
+  new Date(Date.UTC(monthStartDate.getUTCFullYear(), monthStartDate.getUTCMonth(), clampDayOfMonth(monthStartDate, day)));
+
+const utcDayStart = (date: Date): Date =>
+  new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+
+const prorateRemainingInMonth = (amountMinor: number, monthStartDate: Date, periodStart: Date): number => {
+  if (periodStart <= monthStartDate) return amountMinor;
+
+  const daysInMonth = new Date(
+    Date.UTC(monthStartDate.getUTCFullYear(), monthStartDate.getUTCMonth() + 1, 0),
+  ).getUTCDate();
+  const currentDay = Math.min(Math.max(periodStart.getUTCDate(), 1), daysInMonth);
+  const remainingDaysInclusive = daysInMonth - currentDay + 1;
+
+  return Math.round((amountMinor * remainingDaysInclusive) / daysInMonth);
+};
+
+const normalizeName = (value: string): string =>
+  value
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+
+const expenseLooksPaid = ({
+  name,
+  amountMinor,
+  actuals,
+}: {
+  name: string;
+  amountMinor: number;
+  actuals: Array<typeof actualExpenses.$inferSelect>;
+}): boolean => {
+  const normalizedName = normalizeName(name);
+  return actuals.some((actual) => {
+    if (actual.amountMinor !== amountMinor) return false;
+    const normalizedActual = normalizeName(actual.name);
+    return normalizedActual === normalizedName ||
+      normalizedActual.includes(normalizedName) ||
+      normalizedName.includes(normalizedActual);
+  });
 };
 
 export const getOrCreateUser = async (identity: UserIdentity, database: Database = db) => {
@@ -187,7 +234,8 @@ export const runForecast = async ({
     const month = addMonths(startMonth, index);
     const from = monthStart(month);
     const to = nextMonthStart(month);
-    const [plans, actuals] = await Promise.all([
+    const periodStart = index === 0 ? utcDayStart(now) : from;
+    const [plans, actuals, incomeEventRows] = await Promise.all([
       database
         .select()
         .from(plannedExpenses)
@@ -209,35 +257,101 @@ export const runForecast = async ({
             lt(actualExpenses.spentAt, to),
           ),
         ),
+      database
+        .select()
+        .from(incomeEvents)
+        .where(
+          and(
+            eq(incomeEvents.userId, userId),
+            inArray(incomeEvents.status, ["planned", "received"]),
+            gte(incomeEvents.expectedDate, from),
+            lt(incomeEvents.expectedDate, to),
+          ),
+        ),
     ]);
 
     const matchingScenarioExpenses = scenarioExpenses.filter(
-      (expense) => expense.plannedFor >= from && expense.plannedFor < to,
+      (expense) => expense.plannedFor >= periodStart && expense.plannedFor < to,
+    );
+    const plannedIncomeEventsMinor = sum(
+      incomeEventRows
+        .filter((event) => event.status === "planned" && event.expectedDate && event.expectedDate >= periodStart)
+        .map((event) => event.amountMinor),
+    );
+    const eventRuleIds = new Set(
+      incomeEventRows
+        .filter((event) => event.incomeRuleId)
+        .map((event) => event.incomeRuleId),
+    );
+    const ruleIncomeMinor = sum(
+      snapshot.incomeRules
+        .filter((rule) => rule.frequency === "monthly")
+        .filter((rule) => !eventRuleIds.has(rule.id))
+        .filter((rule) => {
+          const dueDay = rule.defaultDay ?? rule.expectedDayFrom ?? 1;
+          return dateInMonth(from, dueDay) >= periodStart;
+        })
+        .map((rule) => rule.amountMinor),
+    );
+    const recurringExpensesMinor = sum(
+      snapshot.recurringExpenses
+        .filter((expense) => expense.frequency === "monthly")
+        .filter((expense) => {
+          if (expenseLooksPaid({ name: expense.name, amountMinor: expense.amountMinor, actuals })) return false;
+          if (!expense.dayOfMonth) return true;
+          return dateInMonth(from, expense.dayOfMonth) >= periodStart;
+        })
+        .map((expense) =>
+          !expense.dayOfMonth && index === 0
+            ? prorateRemainingInMonth(expense.amountMinor, from, periodStart)
+            : expense.amountMinor,
+        ),
+    );
+    const savingsContributionsMinor = sum(
+      snapshot.savingsRules.map((rule) => {
+        if (rule.type === "monthly_fixed") {
+          if (rule.dayOfMonth && dateInMonth(from, rule.dayOfMonth) < periodStart) return 0;
+          return !rule.dayOfMonth && index === 0
+            ? prorateRemainingInMonth(rule.amountMinor ?? 0, from, periodStart)
+            : rule.amountMinor ?? 0;
+        }
+
+        if (rule.type === "percentage_of_income") {
+          if (rule.dayOfMonth && dateInMonth(from, rule.dayOfMonth) < periodStart) return 0;
+          const amountMinor = Math.round(((ruleIncomeMinor + plannedIncomeEventsMinor) * (rule.percentBps ?? 0)) / 10_000);
+          return !rule.dayOfMonth && index === 0
+            ? prorateRemainingInMonth(amountMinor, from, periodStart)
+            : amountMinor;
+        }
+
+        return 0;
+      }),
     );
     const plannedExpensesMinor =
       sum(plans.map((expense) => expense.amountMinor)) +
       sum(matchingScenarioExpenses.map((expense) => expense.amountMinor));
-    const actualExpensesMinor = sum(actuals.map((expense) => expense.amountMinor));
+    const actualExpensesMinor = 0;
+    const incomeMinor = ruleIncomeMinor + plannedIncomeEventsMinor;
     const openingFreeCashMinor = freeCashMinor;
     const closingFreeCashMinor =
       openingFreeCashMinor +
-      snapshot.totals.monthlyIncomeMinor -
-      snapshot.totals.monthlyRecurringExpensesMinor -
-      snapshot.totals.monthlySavingsContributionsMinor -
+      incomeMinor -
+      recurringExpensesMinor -
+      savingsContributionsMinor -
       plannedExpensesMinor -
       actualExpensesMinor;
 
-    protectedSavingsMinor += snapshot.totals.monthlySavingsContributionsMinor;
+    protectedSavingsMinor += savingsContributionsMinor;
     freeCashMinor = closingFreeCashMinor;
 
     rows.push({
       month,
       openingFreeCashMinor,
-      incomeMinor: snapshot.totals.monthlyIncomeMinor,
-      recurringExpensesMinor: snapshot.totals.monthlyRecurringExpensesMinor,
+      incomeMinor,
+      recurringExpensesMinor,
       plannedExpensesMinor,
       actualExpensesMinor,
-      savingsContributionsMinor: snapshot.totals.monthlySavingsContributionsMinor,
+      savingsContributionsMinor,
       closingFreeCashMinor,
       protectedSavingsMinor,
       riskLevel: riskLevel(closingFreeCashMinor),
