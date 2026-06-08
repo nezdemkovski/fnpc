@@ -234,13 +234,20 @@ const expectationChecks: Record<string, (output: JsonRecord, expected: unknown) 
   missingEvidence: (output) => Number(output.evidenceCount ?? 0) === 0 || output.hasEvidence === false,
   noInventedFacts: (output) => output.ok === true,
   debitsOperatingAccount: (output) =>
-    isRecord(output.accountImpact) &&
-    typeof output.accountImpact.accountId === "string" &&
-    typeof output.accountImpact.adjustedBalanceMinor === "number",
-  createsAdjustedAccountBalance: (output) =>
-    typeof output.accountBalanceId === "string" &&
-    isRecord(output.accountImpact) &&
-    output.accountImpact.adjustedBalanceMinor !== output.accountImpact.previousBalanceMinor,
+    isRecord(output.recordedPayment) &&
+    isRecord(output.recordedPayment.accountDebit) &&
+    typeof output.recordedPayment.accountDebit.accountId === "string" &&
+    typeof output.recordedPayment.accountDebit.adjustedBalanceMinor === "number",
+  createsAdjustedAccountBalance: (output) => {
+    if (!isRecord(output.recordedPayment) || !isRecord(output.recordedPayment.accountDebit)) {
+      return false;
+    }
+    return (
+      typeof output.recordedPayment.accountDebit.accountBalanceId === "string" &&
+      output.recordedPayment.accountDebit.adjustedBalanceMinor !==
+        output.recordedPayment.accountDebit.previousBalanceMinor
+    );
+  },
   usesUserProvidedAmount: (output) =>
     typeof output.resolvedAmountMinor === "number" &&
     (!Array.isArray(output.candidates) || output.candidates.length === 0),

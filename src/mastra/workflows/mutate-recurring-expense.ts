@@ -1,11 +1,10 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { createStep, createWorkflow } from "@mastra/core/workflows";
 import { z } from "zod";
 import { db } from "../../db/client";
 import {
   actualExpenses,
   accountBalances,
-  accounts,
   financialEvents,
   recurringExpenses,
 } from "../../db/schema";
@@ -16,6 +15,7 @@ import {
   parseUserDate,
 } from "../../finance/dates";
 import { rankEntityCandidates } from "../../finance/entity-matching";
+import { resolveSingleSpendingAccountDebit } from "../../finance/ledger";
 import { formatMoney, majorToMinor } from "../../finance/money";
 import {
   getFinancialSnapshot,
@@ -70,6 +70,23 @@ const forecastSummarySchema = z.object({
   minimumMonth: z.string(),
 });
 
+const accountDebitSchema = z.object({
+  accountId: z.string(),
+  accountName: z.string(),
+  accountType: z.string(),
+  currency: z.string(),
+  previousBalanceMinor: z.number(),
+  adjustedBalanceMinor: z.number(),
+  accountBalanceId: z.string(),
+});
+
+const recordedPaymentSchema = z.object({
+  actualExpenseId: z.string(),
+  amountMinor: z.number(),
+  currency: z.string(),
+  accountDebit: accountDebitSchema,
+});
+
 const mutateRecurringExpenseStateSchema = z.object({
   ok: z.boolean(),
   mastraResourceId: z.string(),
@@ -85,18 +102,7 @@ const mutateRecurringExpenseStateSchema = z.object({
   candidates: z.array(recurringCandidateSchema).default([]),
   beforeExpense: recurringExpenseRecordSchema.optional(),
   afterExpense: recurringExpenseRecordSchema.optional(),
-  actualExpenseId: z.string().optional(),
-  actualExpenseAmountMinor: z.number().optional(),
-  accountBalanceId: z.string().optional(),
-  spendingAccount: z
-    .object({
-      id: z.string(),
-      name: z.string(),
-      type: z.string(),
-      currency: z.string(),
-      latestBalanceMinor: z.number(),
-    })
-    .optional(),
+  recordedPayment: recordedPaymentSchema.optional(),
   baseline: forecastSummarySchema.optional(),
   afterForecast: forecastSummarySchema.optional(),
 });
@@ -496,59 +502,30 @@ const applyRecurringExpenseMutationStep = createStep({
           : inputData.beforeExpense.amountMinor;
       const currency = normalizeCurrency(initial.currency, inputData.beforeExpense.currency);
 
-      const activeAccounts = await db
-        .select()
-        .from(accounts)
-        .where(
-          and(
-            eq(accounts.userId, inputData.userId),
-            eq(accounts.isActive, true),
-            eq(accounts.currency, currency),
-          ),
-        );
-      const spendingAccounts = activeAccounts.filter(
-        (account) => account.type === "checking" || account.type === "cash",
-      );
-      const selectedAccount =
-        spendingAccounts.length === 1 ? spendingAccounts[0] : undefined;
+      const debitResult = await resolveSingleSpendingAccountDebit({
+        database: db,
+        userId: inputData.userId,
+        currency,
+        amountMinor,
+      });
 
-      if (!selectedAccount) {
+      if (!debitResult.ok) {
         return {
           ...inputData,
           ok: false,
           needsConfirmation: true,
-          message:
-            spendingAccounts.length === 0
-              ? "No active checking or cash account exists for this currency. Add or identify the account before recording the payment."
-              : "Multiple checking/cash accounts could be debited. Confirm the account before recording the payment.",
+          message: debitResult.message,
         };
       }
 
-      const [latestBalance] = await db
-        .select()
-        .from(accountBalances)
-        .where(eq(accountBalances.accountId, selectedAccount.id))
-        .orderBy(desc(accountBalances.asOf), desc(accountBalances.createdAt))
-        .limit(1);
-
-      if (!latestBalance) {
-        return {
-          ...inputData,
-          ok: false,
-          needsConfirmation: true,
-          message:
-            "The selected account has no known balance. Set the account balance before recording payments from it.",
-        };
-      }
-
-      const adjustedBalanceMinor = latestBalance.amountMinor - amountMinor;
+      const accountDebit = debitResult.debit;
 
       const { actualExpense, accountBalance } = await db.transaction(async (tx) => {
         const [createdExpense] = await tx
           .insert(actualExpenses)
           .values({
             userId: inputData.userId!,
-            accountId: selectedAccount.id,
+            accountId: accountDebit.accountId,
             name: inputData.beforeExpense!.name,
             amountMinor,
             currency,
@@ -561,8 +538,8 @@ const applyRecurringExpenseMutationStep = createStep({
         const [createdBalance] = await tx
           .insert(accountBalances)
           .values({
-            accountId: selectedAccount.id,
-            amountMinor: adjustedBalanceMinor,
+            accountId: accountDebit.accountId,
+            amountMinor: accountDebit.adjustedBalanceMinor,
             asOf: spentAt,
             source: "adjusted",
           })
@@ -584,8 +561,8 @@ const applyRecurringExpenseMutationStep = createStep({
           entityId: createdBalance.id,
           eventType: "created",
           before: {
-            accountId: selectedAccount.id,
-            amountMinor: latestBalance.amountMinor,
+            accountId: accountDebit.accountId,
+            amountMinor: accountDebit.previousBalanceMinor,
           },
           after: createdBalance,
           reason: JSON.stringify({
@@ -593,7 +570,7 @@ const applyRecurringExpenseMutationStep = createStep({
             action: "record_payment",
             actualExpenseId: createdExpense.id,
             recurringExpenseId: inputData.beforeExpense!.id,
-            accountName: selectedAccount.name,
+            accountName: accountDebit.accountName,
           }),
           sourceMessageId: initial.sourceMessageId,
         });
@@ -615,15 +592,14 @@ const applyRecurringExpenseMutationStep = createStep({
       return {
         ...inputData,
         afterExpense: inputData.beforeExpense,
-        actualExpenseId: actualExpense.id,
-        actualExpenseAmountMinor: actualExpense.amountMinor,
-        accountBalanceId: accountBalance.id,
-        spendingAccount: {
-          id: selectedAccount.id,
-          name: selectedAccount.name,
-          type: selectedAccount.type,
-          currency: selectedAccount.currency,
-          latestBalanceMinor: latestBalance.amountMinor,
+        recordedPayment: {
+          actualExpenseId: actualExpense.id,
+          amountMinor: actualExpense.amountMinor,
+          currency: actualExpense.currency,
+          accountDebit: {
+            ...accountDebit,
+            accountBalanceId: accountBalance.id,
+          },
         },
       };
     }
@@ -730,7 +706,7 @@ const buildRecurringExpenseMutationResultStep = createStep({
             : ("recurring_expense" as const),
         entityId:
           inputData.action === "record_payment"
-            ? inputData.actualExpenseId!
+            ? inputData.recordedPayment!.actualExpenseId
             : inputData.afterExpense.id,
         name: inputData.afterExpense.name,
         action: changedAction,
@@ -769,24 +745,21 @@ const buildRecurringExpenseMutationResultStep = createStep({
           }
         : undefined,
       accountImpact:
-        inputData.action === "record_payment" &&
-        inputData.spendingAccount &&
-        inputData.actualExpenseAmountMinor !== undefined
+        inputData.action === "record_payment" && inputData.recordedPayment
           ? {
-              accountId: inputData.spendingAccount.id,
-              accountName: inputData.spendingAccount.name,
-              previousBalanceMinor: inputData.spendingAccount.latestBalanceMinor,
+              accountId: inputData.recordedPayment.accountDebit.accountId,
+              accountName: inputData.recordedPayment.accountDebit.accountName,
+              previousBalanceMinor:
+                inputData.recordedPayment.accountDebit.previousBalanceMinor,
               adjustedBalanceMinor:
-                inputData.spendingAccount.latestBalanceMinor -
-                inputData.actualExpenseAmountMinor,
+                inputData.recordedPayment.accountDebit.adjustedBalanceMinor,
               formattedPreviousBalance: formatMoney(
-                inputData.spendingAccount.latestBalanceMinor,
-                inputData.spendingAccount.currency,
+                inputData.recordedPayment.accountDebit.previousBalanceMinor,
+                inputData.recordedPayment.accountDebit.currency,
               ),
               formattedAdjustedBalance: formatMoney(
-                inputData.spendingAccount.latestBalanceMinor -
-                  inputData.actualExpenseAmountMinor,
-                inputData.spendingAccount.currency,
+                inputData.recordedPayment.accountDebit.adjustedBalanceMinor,
+                inputData.recordedPayment.accountDebit.currency,
               ),
             }
           : undefined,
