@@ -180,6 +180,7 @@ const searchWorkflowSnapshots = async ({
         "createdAt" as created_at
       from mastra_workflow_snapshot
       where "resourceId" = ${mastraResourceId}
+        and coalesce(workflow_name::text, '') != 'explain-financial-fact'
         and (${sql.join(likeTerms.map((term) => sql`snapshot::text ilike ${term}`), sql` or `)})
       order by "createdAt" desc
       limit ${limit}

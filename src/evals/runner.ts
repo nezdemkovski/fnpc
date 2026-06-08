@@ -39,6 +39,20 @@ const scorersForDefinition = (
 ): MastraScorer<any, any, any, any>[] =>
   definition.scorerIds.map((scorerId) => mastra.getScorerById(scorerId as never));
 
+export const agentInputToTurns = (input: unknown): string[] => {
+  if (typeof input === "string") return [input];
+  if (
+    typeof input === "object" &&
+    input !== null &&
+    "turns" in input &&
+    Array.isArray(input.turns) &&
+    input.turns.every((turn) => typeof turn === "string")
+  ) {
+    return input.turns;
+  }
+  return [String(input)];
+};
+
 export const runEvalDatasets = async (
   mastra: Mastra,
   options: RunEvalDatasetsOptions,
@@ -73,16 +87,31 @@ export const runEvalDatasets = async (
                 const resourceId =
                   agentResourceIdFromMetadata(metadata) ?? `eval:agent:${definition.name}`;
                 const threadId = `${resourceId}:${name}`;
-                await memory?.createThread({ threadId, resourceId, title: String(input) }).catch(() => undefined);
-                const result = await agent.generate(String(input), {
-                  memory: { thread: threadId, resource: resourceId },
-                });
+                const turns = agentInputToTurns(input);
+                await memory?.createThread({ threadId, resourceId, title: turns[0] ?? definition.name }).catch(() => undefined);
+                const turnResults = [];
+                for (const turn of turns) {
+                  const result = await agent.generate(turn, {
+                    memory: { thread: threadId, resource: resourceId },
+                  });
+                  turnResults.push(result);
+                }
+                const result = turnResults[turnResults.length - 1];
                 return {
-                  text: result.text,
-                  steps: result.steps?.map((step) => ({
-                    toolCalls: step.toolCalls,
-                    toolResults: step.toolResults,
+                  text: result?.text ?? "",
+                  turns: turnResults.map((turnResult) => ({
+                    text: turnResult.text,
+                    steps: turnResult.steps?.map((step) => ({
+                      toolCalls: step.toolCalls,
+                      toolResults: step.toolResults,
+                    })),
                   })),
+                  steps: turnResults.flatMap((turnResult) =>
+                    turnResult.steps?.map((step) => ({
+                      toolCalls: step.toolCalls,
+                      toolResults: step.toolResults,
+                    })) ?? [],
+                  ),
                 };
               },
               scorers: scorersForDefinition(mastra, definition),

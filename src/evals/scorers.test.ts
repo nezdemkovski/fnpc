@@ -35,6 +35,64 @@ describe("eval scorers", () => {
     expect(result.score).toBe(0);
   });
 
+  test("scores agent text expectations and forbidden tools", () => {
+    const result = scoreAgentRouting({
+      output: {
+        text: "I cannot find evidence for that saved plan, so I will not invent it.",
+        steps: [
+          {
+            toolCalls: [
+              {
+                toolName: "explainFinancialFactTool",
+                args: { query: "unknown plan" },
+              },
+            ],
+          },
+        ],
+      },
+      groundTruth: {
+        toolId: "explain-financial-fact",
+        args: { query: "unknown plan" },
+        forbiddenToolIds: ["mutate-planned-expense"],
+        answer: {
+          includes: ["cannot find evidence"],
+          excludes: ["saved it"],
+        },
+      },
+    });
+
+    expect(result.score).toBe(1);
+  });
+
+  test("fails agent text expectations when answer hallucinates persistence", () => {
+    const result = scoreAgentRouting({
+      output: {
+        text: "I saved it as planned.",
+        steps: [
+          {
+            toolCalls: [
+              {
+                toolName: "explainFinancialFactTool",
+                args: { query: "unknown plan" },
+              },
+            ],
+          },
+        ],
+      },
+      groundTruth: {
+        toolId: "explain-financial-fact",
+        args: { query: "unknown plan" },
+        forbiddenToolIds: ["mutate-planned-expense"],
+        answer: {
+          includes: ["cannot find evidence"],
+          excludes: ["saved it"],
+        },
+      },
+    });
+
+    expect(result.score).toBe(0);
+  });
+
   test("scores workflow contracts with changed arrays and expectations", () => {
     const result = scoreWorkflowContract({
       output: {
@@ -64,6 +122,21 @@ describe("eval scorers", () => {
       groundTruth: {
         ok: true,
         changed: { entityType: "actual_expense", action: "created" },
+      },
+    });
+
+    expect(result.score).toBe(0);
+  });
+
+  test("fails workflow contracts when savings buckets are duplicated", () => {
+    const result = scoreWorkflowContract({
+      output: {
+        ok: true,
+        afterBuckets: [{ name: "Car" }, { name: "car" }],
+      },
+      groundTruth: {
+        ok: true,
+        expectations: { noDuplicateBucketNames: true },
       },
     });
 

@@ -5,6 +5,11 @@ type JsonRecord = Record<string, unknown>;
 type AgentGroundTruth = {
   toolId: string;
   args?: JsonRecord;
+  forbiddenToolIds?: string[];
+  answer?: {
+    includes?: string[];
+    excludes?: string[];
+  };
 };
 
 type WorkflowGroundTruth = {
@@ -105,6 +110,25 @@ const outputText = (value: unknown): string => {
   return "";
 };
 
+const textContains = (text: string, expected: string): boolean =>
+  normalizeName(text).includes(normalizeName(expected));
+
+const answerMatches = (output: unknown, expected: AgentGroundTruth["answer"]): string[] => {
+  if (!expected) return [];
+  const text = outputText(output);
+  const failures: string[] = [];
+
+  for (const phrase of expected.includes ?? []) {
+    if (!textContains(text, phrase)) failures.push(`missing answer phrase "${phrase}"`);
+  }
+
+  for (const phrase of expected.excludes ?? []) {
+    if (textContains(text, phrase)) failures.push(`forbidden answer phrase "${phrase}"`);
+  }
+
+  return failures;
+};
+
 export const scoreAgentRouting = ({
   output,
   groundTruth,
@@ -113,16 +137,22 @@ export const scoreAgentRouting = ({
   groundTruth: AgentGroundTruth;
 }) => {
   const toolCalls = collectToolCalls(output);
+  const forbiddenToolIds = new Set((groundTruth.forbiddenToolIds ?? []).map(normalizeToolId));
+  const forbiddenCalls = toolCalls.filter((call) => forbiddenToolIds.has(call.toolId));
+  const answerFailures = answerMatches(output, groundTruth.answer);
+
   if (groundTruth.toolId === "none") {
     const text = outputText(output).toLowerCase();
     const refusedLiveLookup =
       text.includes("live") || text.includes("google") || text.includes("amount");
+    const failures = [
+      ...(toolCalls.length === 0 ? [] : [`Unexpected tool calls: ${toolCalls.map((call) => call.toolId).join(", ")}`]),
+      ...(refusedLiveLookup ? [] : ["Answer did not refuse live lookup clearly."]),
+      ...answerFailures,
+    ];
     return {
-      score: toolCalls.length === 0 && refusedLiveLookup ? 1 : 0,
-      reason:
-        toolCalls.length === 0
-          ? "No tool call was made."
-          : `Unexpected tool calls: ${toolCalls.map((call) => call.toolId).join(", ")}`,
+      score: failures.length === 0 ? 1 : 0,
+      reason: failures.length === 0 ? "No tool call was made and answer matched." : failures.join("; "),
     };
   }
 
@@ -130,15 +160,16 @@ export const scoreAgentRouting = ({
   const matchingArgs = matchingCalls.some((call) =>
     valuesMatch(call.args, groundTruth.args ?? {}),
   );
+  const failures = [
+    ...(matchingCalls.length > 0 ? [] : [`Expected ${groundTruth.toolId}, got ${toolCalls.map((call) => call.toolId).join(", ") || "no tool calls"}`]),
+    ...(matchingCalls.length > 0 && !matchingArgs ? [`Matched ${groundTruth.toolId}, but arguments did not satisfy ground truth`] : []),
+    ...(forbiddenCalls.length > 0 ? [`Forbidden tool calls: ${forbiddenCalls.map((call) => call.toolId).join(", ")}`] : []),
+    ...answerFailures,
+  ];
 
   return {
-    score: matchingCalls.length > 0 && matchingArgs ? 1 : 0,
-    reason:
-      matchingCalls.length === 0
-        ? `Expected ${groundTruth.toolId}, got ${toolCalls.map((call) => call.toolId).join(", ") || "no tool calls"}.`
-        : matchingArgs
-          ? `Matched ${groundTruth.toolId}.`
-          : `Matched ${groundTruth.toolId}, but arguments did not satisfy ground truth.`,
+    score: failures.length === 0 ? 1 : 0,
+    reason: failures.length === 0 ? `Matched ${groundTruth.toolId}.` : `${failures.join("; ")}.`,
   };
 };
 
@@ -232,6 +263,17 @@ const expectationChecks: Record<string, (output: JsonRecord, expected: unknown) 
     changedMatches(output, { entityType: "savings_bucket" }) ||
     (Array.isArray(output.afterBuckets) && output.afterBuckets.length > 0),
   monthlySavingsContributionIncreases: (output) => output.ok === true,
+  noDuplicateBucketNames: (output) => {
+    if (!Array.isArray(output.afterBuckets)) return true;
+    const names = output.afterBuckets
+      .filter(isRecord)
+      .map((bucket) => bucket.name)
+      .filter((name): name is string => typeof name === "string")
+      .map(normalizeName);
+    return new Set(names).size === names.length;
+  },
+  noAdditionalMonthlySavings: (output) =>
+    output.beforeMonthlySavingsContributionsMinor === output.afterMonthlySavingsContributionsMinor,
 };
 
 const expectationMatches = (output: JsonRecord, key: string, expected: unknown): boolean => {

@@ -95,8 +95,13 @@ export const resetAgentEvalFixtures = async (definitions: EvalDatasetDefinition[
 
   const userByResourceId = new Map(insertedUsers.map((user) => [user.mastraResourceId, user]));
 
-  const movePlanUser = userByResourceId.get("eval:agent:planned_expense:move");
-  if (movePlanUser) {
+  for (const resourceId of [
+    "eval:agent:planned_expense:move",
+    "eval:agent:conversation:move_plan_followup",
+  ]) {
+    const movePlanUser = userByResourceId.get(resourceId);
+    if (!movePlanUser) continue;
+
     await db.insert(plannedExpenses).values({
       userId: movePlanUser.id,
       name: "office chair",
@@ -177,6 +182,7 @@ export const resetAgentEvalFixtures = async (definitions: EvalDatasetDefinition[
   for (const resourceId of [
     "eval:agent:savings:bucket_contribution",
     "eval:agent:savings:split_existing_contribution",
+    "eval:agent:conversation:savings_reallocation_followup",
   ]) {
     const savingsUser = userByResourceId.get(resourceId);
     if (!savingsUser) continue;

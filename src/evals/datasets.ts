@@ -1,10 +1,22 @@
 import { z } from "zod";
 
-export const agentInputSchema = z.string();
+export const agentInputSchema = z.union([
+  z.string(),
+  z.object({
+    turns: z.array(z.string()).min(1),
+  }),
+]);
 
 export const agentIntentRoutingGroundTruthSchema = z.object({
   toolId: z.string(),
   args: z.record(z.string(), z.unknown()),
+  forbiddenToolIds: z.array(z.string()).optional(),
+  answer: z
+    .object({
+      includes: z.array(z.string()).optional(),
+      excludes: z.array(z.string()).optional(),
+    })
+    .optional(),
 });
 
 export const workflowInputSchema = z.record(z.string(), z.unknown());
@@ -221,6 +233,94 @@ export const evalDatasetDefinitions: EvalDatasetDefinition[] = [
           args: { name: "coffee machine", amount: 4500, plannedFor: "2026-07-15" },
         },
         metadata: { category: "date", case: "explicit_day" },
+      },
+    ],
+  },
+  {
+    name: "fnpc-agent-conversation-routing",
+    description:
+      "Neutral multi-turn prompts for checking that the FNPC agent connects follow-up messages inside one memory thread.",
+    targetType: "agent",
+    targetIds: ["fnpc"],
+    scorerIds: ["fnpc-agent-routing-contract"],
+    inputSchema: agentInputSchema,
+    groundTruthSchema: agentIntentRoutingGroundTruthSchema,
+    items: [
+      {
+        input: {
+          turns: ["Move the office chair purchase.", "To August."],
+        },
+        groundTruth: {
+          toolId: "mutate-planned-expense",
+          args: { action: "move", name: "office chair", plannedFor: "2026-08" },
+        },
+        metadata: { category: "conversation", case: "move_plan_followup" },
+      },
+      {
+        input: {
+          turns: [
+            "I want to put 20000 USD per month into the car envelope.",
+            "Use my existing savings contribution, do not add it on top.",
+          ],
+        },
+        groundTruth: {
+          toolId: "mutate-savings-plan",
+          args: {
+            action: "reallocate_monthly_fixed",
+            bucketName: "car",
+            monthlyAmount: 20000,
+          },
+          forbiddenToolIds: ["save-financial-facts"],
+        },
+        metadata: { category: "conversation", case: "savings_reallocation_followup" },
+      },
+      {
+        input: {
+          turns: ["Can I buy a monitor for 12000 USD next month?", "Add it to the plan."],
+        },
+        groundTruth: {
+          toolId: "mutate-planned-expense",
+          args: { action: "create", name: "monitor", amount: 12000, plannedFor: "2026-07" },
+        },
+        metadata: { category: "conversation", case: "decision_to_plan_followup" },
+      },
+    ],
+  },
+  {
+    name: "fnpc-agent-provenance-guardrails",
+    description:
+      "Neutral prompts for checking that the FNPC agent uses provenance tools and does not claim missing facts exist.",
+    targetType: "agent",
+    targetIds: ["fnpc"],
+    scorerIds: ["fnpc-agent-routing-contract"],
+    inputSchema: agentInputSchema,
+    groundTruthSchema: agentIntentRoutingGroundTruthSchema,
+    items: [
+      {
+        input: "Where did the yacht plan come from?",
+        groundTruth: {
+          toolId: "explain-financial-fact",
+          args: { query: "yacht plan" },
+          forbiddenToolIds: ["mutate-planned-expense", "save-financial-facts"],
+          answer: {
+            includes: ["no evidence"],
+            excludes: ["saved it", "I found the plan"],
+          },
+        },
+        metadata: { category: "provenance_guardrail", case: "missing_plan_evidence" },
+      },
+      {
+        input: "Why do you think I have a drone budget?",
+        groundTruth: {
+          toolId: "explain-financial-fact",
+          args: { query: "drone budget" },
+          forbiddenToolIds: ["mutate-planned-expense", "save-financial-facts"],
+          answer: {
+            includes: ["no evidence"],
+            excludes: ["your drone budget is", "saved budget"],
+          },
+        },
+        metadata: { category: "provenance_guardrail", case: "missing_budget_evidence" },
       },
     ],
   },
@@ -695,6 +795,7 @@ export const evalDatasetDefinitions: EvalDatasetDefinition[] = [
           expectations: {
             hasBucket: true,
             targetAmount: 60000,
+            noDuplicateBucketNames: true,
           },
         },
         metadata: { category: "workflow", case: "create_bucket" },
@@ -728,6 +829,8 @@ export const evalDatasetDefinitions: EvalDatasetDefinition[] = [
           ok: true,
           expectations: {
             totalMonthlySavingsStaysAt: 30000,
+            noAdditionalMonthlySavings: true,
+            noDuplicateBucketNames: true,
             bucketContribution: 20000,
             generalContribution: 10000,
           },
