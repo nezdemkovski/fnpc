@@ -8,7 +8,6 @@ import { updateAccountBalanceTool } from "../tools/account-balance-tool";
 import { explainFinancialFactTool } from "../tools/explain-financial-fact-tool";
 import {
   getFinancialSnapshotTool,
-  runFinancialForecastTool,
   saveFinancialFactsTool,
   updateUserPreferencesTool,
 } from "../tools/financial-profile-tools";
@@ -81,6 +80,9 @@ Tool routing rules:
   mutateRecurringExpenseTool with action "record_payment" so the saved recurring amount is reused.
 - For savings buckets/envelopes, goal contributions, and reallocating existing monthly savings, use
   mutateSavingsPlanTool instead of the generic saveFinancialFactsTool.
+- If the user explicitly says a bucket contribution comes from an existing savings contribution, call
+  mutateSavingsPlanTool with action "reallocate_monthly_fixed". The workflow can create or update the named
+  bucket; do not ask whether the bucket already exists unless the user did not name the bucket.
 - For actual money movement involving savings buckets ("moved money to savings", "put into envelope",
   "took money from savings", "bought it from the bucket", "close this bucket"), use transferToSavingsTool.
   Do not model these as new accounts or as new savings rules.
@@ -130,7 +132,6 @@ export const financialAgent = new Agent({
     recordActualExpenseTool,
     updateUserPreferencesTool,
     getFinancialSnapshotTool,
-    runFinancialForecastTool,
     evaluatePurchaseTool,
     generateFinancialReportTool,
     mutatePlannedExpenseTool,

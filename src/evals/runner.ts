@@ -1,7 +1,14 @@
 import type { Mastra } from "@mastra/core";
+import type { MastraScorer } from "@mastra/core/evals";
 import type { ExperimentSummary } from "@mastra/core/datasets";
 import { evalDatasetDefinitions, type EvalDatasetDefinition } from "./datasets";
-import { cleanupWorkflowEvalFixtures, resetWorkflowEvalFixtures } from "./fixtures";
+import {
+  agentResourceIdFromMetadata,
+  cleanupAgentEvalFixtures,
+  cleanupWorkflowEvalFixtures,
+  resetAgentEvalFixtures,
+  resetWorkflowEvalFixtures,
+} from "./fixtures";
 
 export type EvalTargetKind = "agent" | "workflow";
 
@@ -26,12 +33,20 @@ const runnableDefinitions = (targetKind: RunEvalDatasetsOptions["targetKind"]): 
 const experimentName = (definition: EvalDatasetDefinition): string =>
   `${definition.name}-${new Date().toISOString()}`;
 
+const scorersForDefinition = (
+  mastra: Mastra,
+  definition: EvalDatasetDefinition,
+): MastraScorer<any, any, any, any>[] =>
+  definition.scorerIds.map((scorerId) => mastra.getScorerById(scorerId as never));
+
 export const runEvalDatasets = async (
   mastra: Mastra,
   options: RunEvalDatasetsOptions,
 ): Promise<EvalExperimentResult[]> => {
   const definitions = runnableDefinitions(options.targetKind);
+  const agentDefinitions = definitions.filter((definition) => definition.targetType === "agent");
   const workflowDefinitions = definitions.filter((definition) => definition.targetType === "workflow");
+  const agentFixtureResourceIds = await resetAgentEvalFixtures(agentDefinitions);
   const fixtureResourceIds = await resetWorkflowEvalFixtures(workflowDefinitions);
 
   try {
@@ -47,12 +62,51 @@ export const runEvalDatasets = async (
       if (!listedDataset || !targetType || !targetId) continue;
 
       const dataset = await mastra.datasets.get({ id: listedDataset.id });
-      const summary = await dataset.startExperiment({
-        name: experimentName(definition),
-        targetType,
-        targetId,
-        maxConcurrency: options.maxConcurrency ?? 1,
-      });
+      const name = experimentName(definition);
+      const summary =
+        targetType === "agent"
+          ? await dataset.startExperiment({
+              name,
+              task: async ({ input, metadata }) => {
+                const agent = mastra.getAgent("financialAgent");
+                const memory = await agent.getMemory();
+                const resourceId =
+                  agentResourceIdFromMetadata(metadata) ?? `eval:agent:${definition.name}`;
+                const threadId = `${resourceId}:${name}`;
+                await memory?.createThread({ threadId, resourceId, title: String(input) }).catch(() => undefined);
+                const result = await agent.generate(String(input), {
+                  memory: { thread: threadId, resource: resourceId },
+                });
+                return {
+                  text: result.text,
+                  steps: result.steps?.map((step) => ({
+                    toolCalls: step.toolCalls,
+                    toolResults: step.toolResults,
+                  })),
+                };
+              },
+              scorers: scorersForDefinition(mastra, definition),
+              maxConcurrency: options.maxConcurrency ?? 1,
+              itemTimeout: 90_000,
+              maxRetries: 0,
+              metadata: {
+                datasetName: definition.name,
+                expectedScorers: definition.scorerIds,
+              },
+            })
+          : await dataset.startExperiment({
+              name,
+              targetType,
+              targetId,
+              scorers: scorersForDefinition(mastra, definition),
+              maxConcurrency: options.maxConcurrency ?? 1,
+              itemTimeout: 30_000,
+              maxRetries: 0,
+              metadata: {
+                datasetName: definition.name,
+                expectedScorers: definition.scorerIds,
+              },
+            });
 
       results.push({ datasetName: definition.name, targetType, targetId, summary });
     }
@@ -60,5 +114,6 @@ export const runEvalDatasets = async (
     return results;
   } finally {
     await cleanupWorkflowEvalFixtures(fixtureResourceIds);
+    await cleanupAgentEvalFixtures(agentFixtureResourceIds);
   }
 };

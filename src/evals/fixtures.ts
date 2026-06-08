@@ -29,6 +29,177 @@ export const workflowResourceIdsFromDatasets = (definitions: EvalDatasetDefiniti
   ),
 ];
 
+export const agentResourceIdFromMetadata = (metadata: Record<string, unknown> | undefined): string | null => {
+  const category = typeof metadata?.category === "string" ? metadata.category : null;
+  const testCase = typeof metadata?.case === "string" ? metadata.case : null;
+  if (!category || !testCase) return null;
+  return `eval:agent:${category}:${testCase}`;
+};
+
+export const agentResourceIdsFromDatasets = (definitions: EvalDatasetDefinition[]): string[] => [
+  ...new Set(
+    definitions.flatMap((definition) =>
+      definition.items.flatMap((item) => {
+        const resourceId = agentResourceIdFromMetadata(item.metadata);
+        return resourceId ? [resourceId] : [];
+      }),
+    ),
+  ),
+];
+
+export const resetAgentEvalFixtures = async (definitions: EvalDatasetDefinition[]): Promise<string[]> => {
+  const resourceIds = agentResourceIdsFromDatasets(definitions);
+  if (resourceIds.length === 0) return resourceIds;
+
+  await db.delete(users).where(inArray(users.mastraResourceId, resourceIds));
+
+  const insertedUsers = await db
+    .insert(users)
+    .values(
+      resourceIds.map((mastraResourceId) => ({
+        mastraResourceId,
+        displayName: "Eval Fixture",
+        defaultCurrency: "USD",
+        timezone: "UTC",
+      })),
+    )
+    .returning();
+
+  for (const user of insertedUsers) {
+    const [account] = await db
+      .insert(accounts)
+      .values({
+        userId: user.id,
+        name: "Operating account",
+        type: "checking",
+        currency: "USD",
+      })
+      .returning();
+
+    await db.insert(accountBalances).values({
+      accountId: account.id,
+      amountMinor: 100_000_00,
+      asOf: parseUserDate("2026-06-02"),
+      source: "user_reported",
+    });
+
+    await db.insert(incomeRules).values({
+      userId: user.id,
+      name: "salary",
+      amountMinor: 10_000_00,
+      currency: "USD",
+      frequency: "monthly",
+      defaultDay: 5,
+    });
+  }
+
+  const userByResourceId = new Map(insertedUsers.map((user) => [user.mastraResourceId, user]));
+
+  const movePlanUser = userByResourceId.get("eval:agent:planned_expense:move");
+  if (movePlanUser) {
+    await db.insert(plannedExpenses).values({
+      userId: movePlanUser.id,
+      name: "office chair",
+      amountMinor: 1_500_00,
+      currency: "USD",
+      plannedFor: parseUserDate("2026-07"),
+      status: "planned",
+      priority: "should",
+    });
+  }
+
+  const dateMovePlanUser = userByResourceId.get("eval:agent:date:next_month");
+  if (dateMovePlanUser) {
+    await db.insert(plannedExpenses).values({
+      userId: dateMovePlanUser.id,
+      name: "training course",
+      amountMinor: 900_00,
+      currency: "USD",
+      plannedFor: parseUserDate("2026-06"),
+      status: "planned",
+      priority: "should",
+    });
+  }
+
+  const cancelPlanUser = userByResourceId.get("eval:agent:planned_expense:cancel");
+  if (cancelPlanUser) {
+    await db.insert(plannedExpenses).values({
+      userId: cancelPlanUser.id,
+      name: "desk lamp",
+      amountMinor: 120_00,
+      currency: "USD",
+      plannedFor: parseUserDate("2026-07"),
+      status: "planned",
+      priority: "nice_to_have",
+    });
+  }
+
+  const recurringPaymentUser = userByResourceId.get("eval:agent:recurring_expense:record_payment_without_amount");
+  if (recurringPaymentUser) {
+    await db.insert(recurringExpenses).values({
+      userId: recurringPaymentUser.id,
+      name: "coworking membership",
+      amountMinor: 300_00,
+      currency: "USD",
+      frequency: "monthly",
+      dayOfMonth: 3,
+      isEssential: false,
+    });
+  }
+
+  const provenanceUser = userByResourceId.get("eval:agent:provenance:explain_saved_fact");
+  if (provenanceUser) {
+    const [recurringExpense] = await db
+      .insert(recurringExpenses)
+      .values({
+        userId: provenanceUser.id,
+        name: "internet bill",
+        amountMinor: 75_00,
+        currency: "USD",
+        frequency: "monthly",
+        dayOfMonth: 2,
+        isEssential: true,
+      })
+      .returning();
+
+    await db.insert(financialEvents).values({
+      userId: provenanceUser.id,
+      entityType: "recurring_expense",
+      entityId: recurringExpense.id,
+      eventType: "created",
+      after: recurringExpense,
+      reason:
+        '{"source":"eval-fixture","sourceText":"internet bill costs 75 USD per month"}',
+      sourceMessageId: "eval-message:internet-bill",
+    });
+  }
+
+  for (const resourceId of [
+    "eval:agent:savings:bucket_contribution",
+    "eval:agent:savings:split_existing_contribution",
+  ]) {
+    const savingsUser = userByResourceId.get(resourceId);
+    if (!savingsUser) continue;
+
+    await db.insert(savingsRules).values({
+      userId: savingsUser.id,
+      type: "monthly_fixed",
+      amountMinor: 30_000_00,
+      dayOfMonth: 6,
+    });
+
+    await db.insert(savingsBuckets).values({
+      userId: savingsUser.id,
+      name: resourceId.endsWith("split_existing_contribution") ? "used car" : "car",
+      currentAmountMinor: 0,
+      currency: "USD",
+      isProtected: true,
+    });
+  }
+
+  return resourceIds;
+};
+
 export const resetWorkflowEvalFixtures = async (definitions: EvalDatasetDefinition[]): Promise<string[]> => {
   const resourceIds = workflowResourceIdsFromDatasets(definitions);
   if (resourceIds.length === 0) return resourceIds;
@@ -188,3 +359,5 @@ export const cleanupWorkflowEvalFixtures = async (resourceIds: string[]): Promis
   if (resourceIds.length === 0) return;
   await db.delete(users).where(inArray(users.mastraResourceId, resourceIds));
 };
+
+export const cleanupAgentEvalFixtures = cleanupWorkflowEvalFixtures;

@@ -28,6 +28,8 @@ for (const definition of evalDatasetDefinitions) {
     metadata: {
       project: "fnpc",
       seededBy: "scripts/seed-eval-datasets.ts",
+      suite: definition.targetType,
+      scorerIds: definition.scorerIds,
     },
     targetType: definition.targetType,
     targetIds: definition.targetIds,

@@ -26,6 +26,7 @@ export type EvalDatasetDefinition = {
   description: string;
   targetType?: "agent" | "workflow";
   targetIds?: string[];
+  scorerIds: string[];
   inputSchema: z.ZodType;
   groundTruthSchema: z.ZodType;
   items: Array<{
@@ -42,6 +43,7 @@ export const evalDatasetDefinitions: EvalDatasetDefinition[] = [
       "Neutral English prompts for checking that the FNPC agent routes user intent to the correct tool and arguments.",
     targetType: "agent",
     targetIds: ["fnpc"],
+    scorerIds: ["fnpc-agent-routing-contract"],
     inputSchema: agentInputSchema,
     groundTruthSchema: agentIntentRoutingGroundTruthSchema,
     items: [
@@ -137,7 +139,7 @@ export const evalDatasetDefinitions: EvalDatasetDefinition[] = [
         input: "How much free operating cash do I have right now?",
         groundTruth: {
           toolId: "get-financial-snapshot",
-          args: { field: "availableOperatingCash" },
+          args: {},
         },
         metadata: { category: "snapshot", case: "current_free_cash_not_forecast" },
       },
@@ -145,7 +147,7 @@ export const evalDatasetDefinitions: EvalDatasetDefinition[] = [
         input: "How much will be left by the end of this month?",
         groundTruth: {
           toolId: "generate-financial-report",
-          args: { reportType: "forecast", horizonMonths: 1 },
+          args: { reportType: "monthly" },
         },
         metadata: { category: "forecast", case: "end_of_month" },
       },
@@ -157,7 +159,6 @@ export const evalDatasetDefinitions: EvalDatasetDefinition[] = [
             action: "reallocate_monthly_fixed",
             bucketName: "car",
             monthlyAmount: 20000,
-            currency: "USD",
           },
         },
         metadata: { category: "savings", case: "bucket_contribution" },
@@ -171,8 +172,6 @@ export const evalDatasetDefinitions: EvalDatasetDefinition[] = [
             action: "reallocate_monthly_fixed",
             bucketName: "used car",
             monthlyAmount: 20000,
-            generalMonthlyAmount: 10000,
-            currency: "USD",
           },
         },
         metadata: { category: "savings", case: "split_existing_contribution" },
@@ -193,6 +192,7 @@ export const evalDatasetDefinitions: EvalDatasetDefinition[] = [
       "Stable English date normalization cases for agent routing. Inputs avoid real personal data and use explicit reference dates.",
     targetType: "agent",
     targetIds: ["fnpc"],
+    scorerIds: ["fnpc-agent-routing-contract"],
     inputSchema: agentInputSchema,
     groundTruthSchema: agentIntentRoutingGroundTruthSchema,
     items: [
@@ -206,10 +206,10 @@ export const evalDatasetDefinitions: EvalDatasetDefinition[] = [
         metadata: { category: "date", case: "next_month" },
       },
       {
-        input: "Reference date: 2026-06-02. Timezone: UTC. Add the backpack purchase for October.",
+        input: "Reference date: 2026-06-02. Timezone: UTC. Add the backpack purchase for 180 USD in October.",
         groundTruth: {
           toolId: "mutate-planned-expense",
-          args: { action: "create", name: "backpack", plannedFor: "2026-10" },
+          args: { action: "create", name: "backpack", amount: 180, plannedFor: "2026-10" },
         },
         metadata: { category: "date", case: "month_name" },
       },
@@ -230,6 +230,7 @@ export const evalDatasetDefinitions: EvalDatasetDefinition[] = [
       "Synthetic workflow inputs for mutatePlannedExpense. Use only with fixture users/resources, not with real user data.",
     targetType: "workflow",
     targetIds: ["mutatePlannedExpense"],
+    scorerIds: ["fnpc-workflow-contract"],
     inputSchema: workflowInputSchema,
     groundTruthSchema: workflowGroundTruthSchema,
     items: [
@@ -287,6 +288,7 @@ export const evalDatasetDefinitions: EvalDatasetDefinition[] = [
       "Synthetic workflow inputs for evaluatePurchase. Cases are neutral purchases and expected structured decision fields.",
     targetType: "workflow",
     targetIds: ["evaluatePurchase"],
+    scorerIds: ["fnpc-workflow-contract"],
     inputSchema: workflowInputSchema,
     groundTruthSchema: workflowGroundTruthSchema,
     items: [
@@ -333,6 +335,7 @@ export const evalDatasetDefinitions: EvalDatasetDefinition[] = [
       "Synthetic workflow inputs for recordActualExpense. Checks explicit payments and matching saved recurring expenses when amount is omitted.",
     targetType: "workflow",
     targetIds: ["recordActualExpense"],
+    scorerIds: ["fnpc-workflow-contract"],
     inputSchema: workflowInputSchema,
     groundTruthSchema: workflowGroundTruthSchema,
     items: [
@@ -383,6 +386,7 @@ export const evalDatasetDefinitions: EvalDatasetDefinition[] = [
       "Synthetic workflow inputs for explainFinancialFact. Checks that saved event provenance can be retrieved instead of guessed.",
     targetType: "workflow",
     targetIds: ["explainFinancialFact"],
+    scorerIds: ["fnpc-workflow-contract"],
     inputSchema: workflowInputSchema,
     groundTruthSchema: workflowGroundTruthSchema,
     items: [
@@ -426,6 +430,7 @@ export const evalDatasetDefinitions: EvalDatasetDefinition[] = [
       "Synthetic workflow inputs for mutateRecurringExpense. Checks update, delete, and recording a recurring payment without creating duplicate recurring facts.",
     targetType: "workflow",
     targetIds: ["mutateRecurringExpense"],
+    scorerIds: ["fnpc-workflow-contract"],
     inputSchema: workflowInputSchema,
     groundTruthSchema: workflowGroundTruthSchema,
     items: [
@@ -489,6 +494,7 @@ export const evalDatasetDefinitions: EvalDatasetDefinition[] = [
       "Synthetic workflow inputs for updateAccountBalance. Checks that account balances and protected savings buckets are updated as separate concepts.",
     targetType: "workflow",
     targetIds: ["updateAccountBalance"],
+    scorerIds: ["fnpc-workflow-contract"],
     inputSchema: workflowInputSchema,
     groundTruthSchema: workflowGroundTruthSchema,
     items: [
@@ -558,6 +564,7 @@ export const evalDatasetDefinitions: EvalDatasetDefinition[] = [
       "Synthetic workflow inputs for transferToSavings. Checks moving money into protected buckets and spending from a bucket without creating fake accounts.",
     targetType: "workflow",
     targetIds: ["transferToSavings"],
+    scorerIds: ["fnpc-workflow-contract"],
     inputSchema: workflowInputSchema,
     groundTruthSchema: workflowGroundTruthSchema,
     items: [
@@ -627,6 +634,7 @@ export const evalDatasetDefinitions: EvalDatasetDefinition[] = [
       "Synthetic workflow inputs for generateFinancialReport. Checks report shape rather than exact personal values.",
     targetType: "workflow",
     targetIds: ["generateFinancialReport"],
+    scorerIds: ["fnpc-workflow-contract"],
     inputSchema: workflowInputSchema,
     groundTruthSchema: workflowGroundTruthSchema,
     items: [
@@ -669,6 +677,7 @@ export const evalDatasetDefinitions: EvalDatasetDefinition[] = [
       "Synthetic workflow inputs for mutateSavingsPlan. Checks bucket creation, contribution setting, and reallocating existing savings instead of adding on top.",
     targetType: "workflow",
     targetIds: ["mutateSavingsPlan"],
+    scorerIds: ["fnpc-workflow-contract"],
     inputSchema: workflowInputSchema,
     groundTruthSchema: workflowGroundTruthSchema,
     items: [

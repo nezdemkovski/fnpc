@@ -34,6 +34,13 @@ const savingsRuleSummarySchema = z.object({
   bucketName: z.string().nullable(),
 });
 
+const savingsBucketSummarySchema = z.object({
+  name: z.string(),
+  targetAmountMinor: z.number().nullable(),
+  currentAmountMinor: z.number(),
+  isProtected: z.boolean(),
+});
+
 const savingsPlanStateSchema = z.object({
   ok: z.boolean(),
   mastraResourceId: z.string(),
@@ -50,6 +57,7 @@ const savingsPlanStateSchema = z.object({
   afterMonthlySavingsContributionsMinor: z.number().optional(),
   beforeRules: z.array(savingsRuleSummarySchema).default([]),
   afterRules: z.array(savingsRuleSummarySchema).default([]),
+  afterBuckets: z.array(savingsBucketSummarySchema).default([]),
 });
 
 const mutateSavingsPlanOutputSchema = savingsPlanStateSchema.extend({
@@ -88,6 +96,14 @@ const summarizeSavingsRules = (snapshot: Awaited<ReturnType<typeof getFinancialS
     bucketName: snapshot.savingsBuckets.find((bucket) => bucket.id === rule.bucketId)?.name ?? null,
   }));
 
+const summarizeSavingsBuckets = (snapshot: Awaited<ReturnType<typeof getFinancialSnapshot>>) =>
+  snapshot.savingsBuckets.map((bucket) => ({
+    name: bucket.name,
+    targetAmountMinor: bucket.targetAmountMinor,
+    currentAmountMinor: bucket.currentAmountMinor,
+    isProtected: bucket.isProtected,
+  }));
+
 const monthlyFixedTotalMinor = (snapshot: Awaited<ReturnType<typeof getFinancialSnapshot>>) =>
   snapshot.savingsRules
     .filter((rule) => rule.type === "monthly_fixed")
@@ -113,6 +129,7 @@ const loadSavingsPlanProfileStep = createStep({
         missingProfileFields,
         beforeRules: [],
         afterRules: [],
+        afterBuckets: [],
         message: "Cannot mutate savings plans until defaultCurrency and timezone are known.",
       };
     }
@@ -135,6 +152,7 @@ const loadSavingsPlanProfileStep = createStep({
         missingProfileFields: [],
         beforeRules: [],
         afterRules: [],
+        afterBuckets: [],
         message: "This savings action requires bucketName.",
       };
     }
@@ -157,6 +175,7 @@ const loadSavingsPlanProfileStep = createStep({
         missingProfileFields: [],
         beforeRules: [],
         afterRules: [],
+        afterBuckets: [],
         message: "This savings action requires monthlyAmount.",
       };
     }
@@ -177,6 +196,7 @@ const loadSavingsPlanProfileStep = createStep({
       beforeMonthlySavingsContributionsMinor: snapshot.totals.monthlySavingsContributionsMinor,
       beforeRules: summarizeSavingsRules(snapshot),
       afterRules: [],
+      afterBuckets: [],
     };
   },
 });
@@ -279,6 +299,7 @@ const applySavingsPlanMutationStep = createStep({
       changed: result.changed,
       afterMonthlySavingsContributionsMinor: afterSnapshot.totals.monthlySavingsContributionsMinor,
       afterRules: summarizeSavingsRules(afterSnapshot),
+      afterBuckets: summarizeSavingsBuckets(afterSnapshot),
     };
   },
 });

@@ -4,6 +4,7 @@ import { ObservabilityStorageClickhouseVNext } from "@mastra/clickhouse";
 import { MastraStorageExporter, Observability, SensitiveDataFilter } from "@mastra/observability";
 import { PostgresStore } from "@mastra/pg";
 import { env } from "../config/env";
+import { agentRoutingScorer, workflowContractScorer } from "../evals/scorers";
 import { financialAgent } from "./agents/financial-agent";
 import { evaluatePurchase } from "./workflows/evaluate-purchase";
 import { explainFinancialFact } from "./workflows/explain-financial-fact";
@@ -49,6 +50,10 @@ export const mastra = new Mastra({
     transferToSavings,
     updateAccountBalance,
     updateFinancialProfile,
+  },
+  scorers: {
+    agentRoutingScorer,
+    workflowContractScorer,
   },
   storage,
   observability: new Observability({

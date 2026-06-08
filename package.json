@@ -10,6 +10,8 @@
     "typecheck": "tsc --noEmit",
     "eval:seed-datasets": "bun --env-file .env scripts/seed-eval-datasets.ts",
     "eval:audit-datasets": "bun --env-file .env scripts/audit-eval-datasets.ts",
+    "eval:audit-workflows": "bun --env-file .env scripts/audit-eval-datasets.ts --target=workflow",
+    "eval:audit-agents": "bun --env-file .env scripts/audit-eval-datasets.ts --target=agent",
     "eval:run-workflows": "bun --env-file .env scripts/run-eval-datasets.ts",
     "eval:run-agents": "bun --env-file .env scripts/run-eval-datasets.ts --target=agent",
     "eval:run-all": "bun --env-file .env scripts/run-eval-datasets.ts --target=all",
