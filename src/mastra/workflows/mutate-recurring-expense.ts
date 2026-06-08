@@ -3,8 +3,6 @@ import { createStep, createWorkflow } from "@mastra/core/workflows";
 import { z } from "zod";
 import { db } from "../../db/client";
 import {
-  actualExpenses,
-  accountBalances,
   financialEvents,
   recurringExpenses,
 } from "../../db/schema";
@@ -15,7 +13,10 @@ import {
   parseUserDate,
 } from "../../finance/dates";
 import { rankEntityCandidates } from "../../finance/entity-matching";
-import { resolveSingleSpendingAccountDebit } from "../../finance/ledger";
+import {
+  recordDebitedActualExpense,
+  resolveSingleSpendingAccountDebit,
+} from "../../finance/ledger";
 import { formatMoney, majorToMinor } from "../../finance/money";
 import {
   getFinancialSnapshot,
@@ -520,86 +521,37 @@ const applyRecurringExpenseMutationStep = createStep({
 
       const accountDebit = debitResult.debit;
 
-      const { actualExpense, accountBalance } = await db.transaction(async (tx) => {
-        const [createdExpense] = await tx
-          .insert(actualExpenses)
-          .values({
-            userId: inputData.userId!,
-            accountId: accountDebit.accountId,
-            name: inputData.beforeExpense!.name,
-            amountMinor,
-            currency,
-            spentAt,
-            source: "telegram",
-            note: [initial.note, JSON.stringify(provenance)].filter(Boolean).join("\n"),
-          })
-          .returning();
-
-        const [createdBalance] = await tx
-          .insert(accountBalances)
-          .values({
-            accountId: accountDebit.accountId,
-            amountMinor: accountDebit.adjustedBalanceMinor,
-            asOf: spentAt,
-            source: "adjusted",
-          })
-          .returning();
-
-        await tx.insert(financialEvents).values({
-          userId: inputData.userId!,
-          entityType: "actual_expense",
-          entityId: createdExpense.id,
-          eventType: "created",
-          after: createdExpense,
-          reason: JSON.stringify(provenance),
-          sourceMessageId: initial.sourceMessageId,
-        });
-
-        await tx.insert(financialEvents).values({
-          userId: inputData.userId!,
-          entityType: "account_balance",
-          entityId: createdBalance.id,
-          eventType: "created",
-          before: {
-            accountId: accountDebit.accountId,
-            amountMinor: accountDebit.previousBalanceMinor,
+      const recordedPayment = await recordDebitedActualExpense({
+        database: db,
+        userId: inputData.userId,
+        name: inputData.beforeExpense.name,
+        amountMinor,
+        currency,
+        spentAt,
+        note: initial.note,
+        sourceMessageId: initial.sourceMessageId,
+        provenance,
+        accountDebit,
+        relatedEvents: [
+          {
+            entityType: "recurring_expense",
+            entityId: inputData.beforeExpense.id,
+            eventType: "paid",
+            before: inputData.beforeExpense,
+            after: inputData.beforeExpense,
+            reason: JSON.stringify(provenance),
           },
-          after: createdBalance,
-          reason: JSON.stringify({
-            source: "mutate-recurring-expense",
-            action: "record_payment",
-            actualExpenseId: createdExpense.id,
-            recurringExpenseId: inputData.beforeExpense!.id,
-            accountName: accountDebit.accountName,
-          }),
-          sourceMessageId: initial.sourceMessageId,
-        });
-
-        await tx.insert(financialEvents).values({
-          userId: inputData.userId!,
-          entityType: "recurring_expense",
-          entityId: inputData.beforeExpense!.id,
-          eventType: "paid",
-          before: inputData.beforeExpense,
-          after: inputData.beforeExpense,
-          reason: JSON.stringify(provenance),
-          sourceMessageId: initial.sourceMessageId,
-        });
-
-        return { actualExpense: createdExpense, accountBalance: createdBalance };
+        ],
       });
 
       return {
         ...inputData,
         afterExpense: inputData.beforeExpense,
         recordedPayment: {
-          actualExpenseId: actualExpense.id,
-          amountMinor: actualExpense.amountMinor,
-          currency: actualExpense.currency,
-          accountDebit: {
-            ...accountDebit,
-            accountBalanceId: accountBalance.id,
-          },
+          actualExpenseId: recordedPayment.actualExpenseId,
+          amountMinor: recordedPayment.amountMinor,
+          currency: recordedPayment.currency,
+          accountDebit: recordedPayment.accountDebit,
         },
       };
     }

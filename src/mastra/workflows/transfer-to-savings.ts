@@ -97,8 +97,6 @@ const transferToSavingsStateSchema = z.object({
   beforeBucket: bucketRecordSchema.optional(),
   afterBucket: bucketRecordSchema.optional(),
   sourceAccount: accountRecordSchema.optional(),
-  accountBalanceId: z.string().optional(),
-  actualExpenseId: z.string().optional(),
   beforeTotals: totalsSchema.optional(),
   afterTotals: totalsSchema.optional(),
 });
@@ -396,8 +394,6 @@ const applyTransferStep = createStep({
     });
     const changed: z.infer<typeof transferToSavingsOutputSchema>["changed"] = [];
     let afterBucket = inputData.beforeBucket;
-    let actualExpenseId: string | undefined;
-    let accountBalanceId: string | undefined;
 
     if (initial.action === "transfer_to_bucket") {
       const bucketName = initial.bucketName ?? "Savings";
@@ -499,7 +495,6 @@ const applyTransferStep = createStep({
           source: "adjusted",
         })
         .returning();
-      accountBalanceId = balance.id;
       await saveEvent({
         userId: inputData.userId,
         entityType: "account_balance",
@@ -530,7 +525,6 @@ const applyTransferStep = createStep({
             note: provenance,
           })
           .returning();
-        actualExpenseId = actualExpense.id;
         await saveEvent({
           userId: inputData.userId,
           entityType: "actual_expense",
@@ -607,8 +601,6 @@ const applyTransferStep = createStep({
     return {
       ...inputData,
       afterBucket,
-      accountBalanceId,
-      actualExpenseId,
       afterTotals: afterSnapshot.totals,
       changed,
       formatted: {

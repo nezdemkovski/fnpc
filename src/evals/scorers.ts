@@ -191,9 +191,22 @@ const outputContainsAmount = (output: JsonRecord, expected: unknown): boolean =>
   const expectedMinor = moneyToMinor(expected);
   if (expectedMinor !== undefined) {
     if (getPath(output, "resolvedAmountMinor") === expectedMinor) return true;
+    if (getPath(output, "afterExpense.amountMinor") === expectedMinor) return true;
+    if (getPath(output, "changed.amountMinor") === expectedMinor) return true;
+    if (getPath(output, "recordedExpense.amountMinor") === expectedMinor) return true;
+    if (getPath(output, "recordedPayment.amountMinor") === expectedMinor) return true;
     if (getPath(output, "impact.deltaMinAvailableMinor") === -expectedMinor) return true;
   }
-  return JSON.stringify(output).includes(String(expected));
+  return false;
+};
+
+const recordedDebit = (output: JsonRecord): JsonRecord | undefined => {
+  const recorded = isRecord(output.recordedExpense)
+    ? output.recordedExpense
+    : isRecord(output.recordedPayment)
+      ? output.recordedPayment
+      : undefined;
+  return recorded && isRecord(recorded.accountDebit) ? recorded.accountDebit : undefined;
 };
 
 const rulesContainContribution = (
@@ -215,6 +228,20 @@ const bucketsContainTarget = (output: JsonRecord, expected: unknown): boolean =>
   return output.afterBuckets.some((bucket) => isRecord(bucket) && bucket.targetAmountMinor === expectedMinor);
 };
 
+const outputMonthMatches = (output: JsonRecord, expected: unknown): boolean => {
+  const expectedMonth = String(expected);
+  const formattedPlanDate = getPath(output, "formattedPlan.plannedFor");
+  if (typeof formattedPlanDate === "string" && formattedPlanDate.startsWith(expectedMonth)) {
+    return true;
+  }
+  const afterPlanDate = getPath(output, "afterPlan.plannedFor");
+  return typeof afterPlanDate === "string" && afterPlanDate.startsWith(expectedMonth);
+};
+
+const outputStatusMatches = (output: JsonRecord, expected: unknown): boolean =>
+  getPath(output, "afterPlan.status") === expected ||
+  getPath(output, "formattedPlan.status") === expected;
+
 const expectationChecks: Record<string, (output: JsonRecord, expected: unknown) => boolean> = {
   hasVerdict: (output) => typeof output.verdict === "string",
   hasBaseline: (output) => isRecord(output.baseline),
@@ -228,24 +255,25 @@ const expectationChecks: Record<string, (output: JsonRecord, expected: unknown) 
     Boolean(output.hasEvidence) ||
     (Array.isArray(output.evidence) && output.evidence.length > 0),
   sourceIncludesFinancialEvent: (output) =>
-    JSON.stringify(output).includes("financial_event") ||
-    JSON.stringify(output).includes("recurring_expense"),
+    Array.isArray(output.evidence) &&
+    output.evidence.some((item) => isRecord(item) && item.source === "financial_event"),
   doesNotHallucinateMissingHistory: (output) => output.ok === true,
   missingEvidence: (output) => Number(output.evidenceCount ?? 0) === 0 || output.hasEvidence === false,
   noInventedFacts: (output) => output.ok === true,
-  debitsOperatingAccount: (output) =>
-    isRecord(output.recordedPayment) &&
-    isRecord(output.recordedPayment.accountDebit) &&
-    typeof output.recordedPayment.accountDebit.accountId === "string" &&
-    typeof output.recordedPayment.accountDebit.adjustedBalanceMinor === "number",
-  createsAdjustedAccountBalance: (output) => {
-    if (!isRecord(output.recordedPayment) || !isRecord(output.recordedPayment.accountDebit)) {
-      return false;
-    }
+  debitsOperatingAccount: (output) => {
+    const debit = recordedDebit(output);
     return (
-      typeof output.recordedPayment.accountDebit.accountBalanceId === "string" &&
-      output.recordedPayment.accountDebit.adjustedBalanceMinor !==
-        output.recordedPayment.accountDebit.previousBalanceMinor
+      Boolean(debit) &&
+      typeof debit?.accountId === "string" &&
+      typeof debit.adjustedBalanceMinor === "number"
+    );
+  },
+  createsAdjustedAccountBalance: (output) => {
+    const debit = recordedDebit(output);
+    if (!debit) return false;
+    return (
+      typeof debit.accountBalanceId === "string" &&
+      debit.adjustedBalanceMinor !== debit.previousBalanceMinor
     );
   },
   usesUserProvidedAmount: (output) =>
@@ -254,7 +282,7 @@ const expectationChecks: Record<string, (output: JsonRecord, expected: unknown) 
   doesNotCreateRecurringExpense: (output) => !changedMatches(output, { entityType: "recurring_expense", action: "created" }),
   amountTakenFromRecurring: (output) => output.ok === true,
   doesNotCreateDuplicate: (output) => output.ok === true,
-  afterInactive: (output) => JSON.stringify(output).includes("inactive") || output.ok === true,
+  afterInactive: (output) => getPath(output, "afterExpense.isActive") === false,
   totalCashUpdates: (output) => output.ok === true,
   protectedSavingsUnchanged: (output) => output.ok === true,
   createsCashAccountWhenMissing: (output) => output.ok === true,
@@ -292,8 +320,8 @@ const expectationMatches = (output: JsonRecord, key: string, expected: unknown):
   if (typeof expected === "boolean" && expected === true && expectationChecks[key]) {
     return expectationChecks[key](output, expected);
   }
-  if (key === "afterMonth") return JSON.stringify(output).includes(String(expected));
-  if (key === "afterStatus") return JSON.stringify(output).includes(String(expected));
+  if (key === "afterMonth") return outputMonthMatches(output, expected);
+  if (key === "afterStatus") return outputStatusMatches(output, expected);
   if (key === "amount") return outputContainsAmount(output, expected);
   if (key === "horizonMonths") return getPath(output, "forecast.horizonMonths") === expected;
   if (key === "targetAmount") return bucketsContainTarget(output, expected);

@@ -1,12 +1,8 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { createStep, createWorkflow } from "@mastra/core/workflows";
 import { z } from "zod";
 import { db } from "../../db/client";
 import {
-  accountBalances,
-  accounts,
-  actualExpenses,
-  financialEvents,
   plannedExpenses,
   recurringExpenses,
 } from "../../db/schema";
@@ -20,6 +16,7 @@ import {
   type MatchCandidate,
   rankEntityCandidates,
 } from "../../finance/entity-matching";
+import { recordDebitedActualExpense, resolveSpendingAccountDebit } from "../../finance/ledger";
 import { formatMoney, majorToMinor } from "../../finance/money";
 import {
   getFinancialSnapshot,
@@ -57,12 +54,24 @@ const resolvedCandidateSchema = candidateSchema.extend({
   score: z.number(),
 });
 
-const spendingAccountSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  type: z.enum(["checking", "cash", "savings", "brokerage", "crypto", "other"]),
+const accountDebitPlanSchema = z.object({
+  accountId: z.string(),
+  accountName: z.string(),
+  accountType: z.string(),
   currency: z.string(),
-  latestBalanceMinor: z.number(),
+  previousBalanceMinor: z.number(),
+  adjustedBalanceMinor: z.number(),
+});
+
+const recordedExpenseSchema = z.object({
+  actualExpenseId: z.string(),
+  name: z.string(),
+  amountMinor: z.number(),
+  currency: z.string(),
+  plannedExpenseId: z.string().optional(),
+  accountDebit: accountDebitPlanSchema.extend({
+    accountBalanceId: z.string(),
+  }),
 });
 
 const recordActualExpenseStateSchema = z.object({
@@ -80,10 +89,8 @@ const recordActualExpenseStateSchema = z.object({
   resolvedCandidate: resolvedCandidateSchema.optional(),
   resolvedAmountMinor: z.number().optional(),
   resolvedCurrency: z.string().optional(),
-  spendingAccount: spendingAccountSchema.optional(),
-  actualExpenseId: z.string().optional(),
-  accountBalanceId: z.string().optional(),
-  plannedExpenseId: z.string().optional(),
+  accountDebit: accountDebitPlanSchema.optional(),
+  recordedExpense: recordedExpenseSchema.optional(),
   snapshot: z
     .object({
       totalCashMinor: z.number(),
@@ -324,70 +331,27 @@ const resolveSpendingAccountStep = createStep({
     }
 
     const initial = getInitData<RecordActualExpenseInput>();
-    const activeAccounts = await db
-      .select()
-      .from(accounts)
-      .where(
-        and(
-          eq(accounts.userId, inputData.userId),
-          eq(accounts.isActive, true),
-          eq(accounts.currency, inputData.resolvedCurrency),
-        ),
-      );
+    const debitResult = await resolveSpendingAccountDebit({
+      database: db,
+      userId: inputData.userId,
+      currency: inputData.resolvedCurrency,
+      amountMinor: inputData.resolvedAmountMinor!,
+      accountId: initial.accountId,
+      accountName: initial.accountName,
+    });
 
-    const spendingAccounts = activeAccounts.filter((account) =>
-      account.type === "checking" || account.type === "cash",
-    );
-    const explicitAccount = initial.accountId
-      ? spendingAccounts.find((account) => account.id === initial.accountId)
-      : initial.accountName
-        ? spendingAccounts.find(
-            (account) =>
-              account.name.toLowerCase() === initial.accountName!.toLowerCase(),
-          )
-        : undefined;
-    const selectedAccount =
-      explicitAccount ??
-      (spendingAccounts.length === 1 ? spendingAccounts[0] : undefined);
-
-    if (!selectedAccount) {
+    if (!debitResult.ok) {
       return {
         ...inputData,
         ok: false,
         needsConfirmation: true,
-        message:
-          spendingAccounts.length === 0
-            ? "No active checking or cash account exists for this currency. Add or identify the account before recording the payment."
-            : "Multiple checking/cash accounts could be debited. Confirm the account before recording the payment.",
-      };
-    }
-
-    const [latestBalance] = await db
-      .select()
-      .from(accountBalances)
-      .where(eq(accountBalances.accountId, selectedAccount.id))
-      .orderBy(desc(accountBalances.asOf), desc(accountBalances.createdAt))
-      .limit(1);
-
-    if (!latestBalance) {
-      return {
-        ...inputData,
-        ok: false,
-        needsConfirmation: true,
-        message:
-          "The selected account has no known balance. Set the account balance before recording payments from it.",
+        message: debitResult.message,
       };
     }
 
     return {
       ...inputData,
-      spendingAccount: {
-        id: selectedAccount.id,
-        name: selectedAccount.name,
-        type: selectedAccount.type,
-        currency: selectedAccount.currency,
-        latestBalanceMinor: latestBalance.amountMinor,
-      },
+      accountDebit: debitResult.debit,
     };
   },
 });
@@ -404,7 +368,7 @@ const applyActualExpenseStep = createStep({
       !inputData.userId ||
       inputData.resolvedAmountMinor === undefined ||
       !inputData.resolvedCurrency ||
-      !inputData.spendingAccount
+      !inputData.accountDebit
     ) {
       return inputData;
     }
@@ -434,85 +398,28 @@ const applyActualExpenseStep = createStep({
         typeof initial.amount === "number" ? "user_provided" : "matched_saved_fact",
     };
 
-    const adjustedBalanceMinor =
-      inputData.spendingAccount.latestBalanceMinor - inputData.resolvedAmountMinor;
-
-    const { expense, accountBalance } = await db.transaction(async (tx) => {
-      const [createdExpense] = await tx
-        .insert(actualExpenses)
-        .values({
-          userId: inputData.userId!,
-          plannedExpenseId: matchedPlan?.id,
-          accountId: inputData.spendingAccount!.id,
-          name: inputData.resolvedCandidate?.name ?? initial.name,
-          amountMinor: inputData.resolvedAmountMinor!,
-          currency: inputData.resolvedCurrency!,
-          spentAt,
-          source: "telegram",
-          note: [initial.note, JSON.stringify(provenance)]
-            .filter(Boolean)
-            .join("\n"),
-        })
-        .returning();
-
-      if (matchedPlan) {
-        await tx
-          .update(plannedExpenses)
-          .set({ status: "paid", updatedAt: new Date() })
-          .where(eq(plannedExpenses.id, matchedPlan.id));
-      }
-
-      const [createdBalance] = await tx
-        .insert(accountBalances)
-        .values({
-          accountId: inputData.spendingAccount!.id,
-          amountMinor: adjustedBalanceMinor,
-          asOf: spentAt,
-          source: "adjusted",
-        })
-        .returning();
-
-      await tx.insert(financialEvents).values({
-        userId: inputData.userId!,
-        entityType: "actual_expense",
-        entityId: createdExpense.id,
-        eventType: "created",
-        after: createdExpense,
-        reason: JSON.stringify(provenance),
-        sourceMessageId: initial.sourceMessageId,
-      });
-
-      await tx.insert(financialEvents).values({
-        userId: inputData.userId!,
-        entityType: "account_balance",
-        entityId: createdBalance.id,
-        eventType: "created",
-        before: {
-          accountId: inputData.spendingAccount!.id,
-          amountMinor: inputData.spendingAccount!.latestBalanceMinor,
-        },
-        after: createdBalance,
-        reason: JSON.stringify({
-          source: "record-actual-expense",
-          actualExpenseId: createdExpense.id,
-          accountName: inputData.spendingAccount!.name,
-        }),
-        sourceMessageId: initial.sourceMessageId,
-      });
-
-      return { expense: createdExpense, accountBalance: createdBalance };
+    const recordedExpense = await recordDebitedActualExpense({
+      database: db,
+      userId: inputData.userId,
+      name: inputData.resolvedCandidate?.name ?? initial.name,
+      amountMinor: inputData.resolvedAmountMinor,
+      currency: inputData.resolvedCurrency,
+      spentAt,
+      note: initial.note,
+      sourceMessageId: initial.sourceMessageId,
+      provenance,
+      accountDebit: inputData.accountDebit,
+      plannedExpenseId: matchedPlan?.id,
     });
 
     const snapshot = await getFinancialSnapshot(inputData.userId);
 
     return {
       ...inputData,
-      actualExpenseId: expense.id,
-      accountBalanceId: accountBalance.id,
-      plannedExpenseId: matchedPlan?.id,
+      recordedExpense,
       snapshot: snapshot.totals,
       formatted: {
-        amount: formatMoney(expense.amountMinor, expense.currency),
+        amount: formatMoney(recordedExpense.amountMinor, recordedExpense.currency),
         availableOperatingCash: formatMoney(
           snapshot.totals.availableOperatingCashMinor,
           inputData.currency!,
@@ -521,8 +428,8 @@ const applyActualExpenseStep = createStep({
       },
       changed: {
         entityType: "actual_expense" as const,
-        entityId: expense.id,
-        name: expense.name,
+        entityId: recordedExpense.actualExpenseId,
+        name: recordedExpense.name,
         action: "created" as const,
       },
     };
