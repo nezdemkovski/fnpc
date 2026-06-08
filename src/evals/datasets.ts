@@ -582,6 +582,8 @@ export const evalDatasetDefinitions: EvalDatasetDefinition[] = [
           expectations: {
             amountTakenFromRecurring: true,
             doesNotCreateRecurringExpense: true,
+            debitsOperatingAccount: true,
+            createsAdjustedAccountBalance: true,
           },
         },
         metadata: { category: "workflow", case: "record_payment_without_amount" },

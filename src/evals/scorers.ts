@@ -233,9 +233,14 @@ const expectationChecks: Record<string, (output: JsonRecord, expected: unknown) 
   doesNotHallucinateMissingHistory: (output) => output.ok === true,
   missingEvidence: (output) => Number(output.evidenceCount ?? 0) === 0 || output.hasEvidence === false,
   noInventedFacts: (output) => output.ok === true,
-  debitsOperatingAccount: (output) => JSON.stringify(output).includes("account"),
+  debitsOperatingAccount: (output) =>
+    isRecord(output.accountImpact) &&
+    typeof output.accountImpact.accountId === "string" &&
+    typeof output.accountImpact.adjustedBalanceMinor === "number",
   createsAdjustedAccountBalance: (output) =>
-    typeof output.accountBalanceId === "string" || JSON.stringify(output).includes("account_balance"),
+    typeof output.accountBalanceId === "string" &&
+    isRecord(output.accountImpact) &&
+    output.accountImpact.adjustedBalanceMinor !== output.accountImpact.previousBalanceMinor,
   usesUserProvidedAmount: (output) =>
     typeof output.resolvedAmountMinor === "number" &&
     (!Array.isArray(output.candidates) || output.candidates.length === 0),

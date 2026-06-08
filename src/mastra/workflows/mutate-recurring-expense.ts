@@ -1,9 +1,11 @@
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { createStep, createWorkflow } from "@mastra/core/workflows";
 import { z } from "zod";
 import { db } from "../../db/client";
 import {
   actualExpenses,
+  accountBalances,
+  accounts,
   financialEvents,
   recurringExpenses,
 } from "../../db/schema";
@@ -84,6 +86,17 @@ const mutateRecurringExpenseStateSchema = z.object({
   beforeExpense: recurringExpenseRecordSchema.optional(),
   afterExpense: recurringExpenseRecordSchema.optional(),
   actualExpenseId: z.string().optional(),
+  actualExpenseAmountMinor: z.number().optional(),
+  accountBalanceId: z.string().optional(),
+  spendingAccount: z
+    .object({
+      id: z.string(),
+      name: z.string(),
+      type: z.string(),
+      currency: z.string(),
+      latestBalanceMinor: z.number(),
+    })
+    .optional(),
   baseline: forecastSummarySchema.optional(),
   afterForecast: forecastSummarySchema.optional(),
 });
@@ -117,6 +130,16 @@ const mutateRecurringExpenseOutputSchema = mutateRecurringExpenseStateSchema.ext
     .object({
       availableOperatingCash: z.string(),
       totalCash: z.string(),
+    })
+    .optional(),
+  accountImpact: z
+    .object({
+      accountId: z.string(),
+      accountName: z.string(),
+      previousBalanceMinor: z.number(),
+      adjustedBalanceMinor: z.number(),
+      formattedPreviousBalance: z.string(),
+      formattedAdjustedBalance: z.string(),
     })
     .optional(),
 });
@@ -473,43 +496,135 @@ const applyRecurringExpenseMutationStep = createStep({
           : inputData.beforeExpense.amountMinor;
       const currency = normalizeCurrency(initial.currency, inputData.beforeExpense.currency);
 
-      const [actualExpense] = await db
-        .insert(actualExpenses)
-        .values({
-          userId: inputData.userId,
-          name: inputData.beforeExpense.name,
-          amountMinor,
-          currency,
-          spentAt,
-          source: "telegram",
-          note: [initial.note, JSON.stringify(provenance)].filter(Boolean).join("\n"),
-        })
-        .returning();
+      const activeAccounts = await db
+        .select()
+        .from(accounts)
+        .where(
+          and(
+            eq(accounts.userId, inputData.userId),
+            eq(accounts.isActive, true),
+            eq(accounts.currency, currency),
+          ),
+        );
+      const spendingAccounts = activeAccounts.filter(
+        (account) => account.type === "checking" || account.type === "cash",
+      );
+      const selectedAccount =
+        spendingAccounts.length === 1 ? spendingAccounts[0] : undefined;
 
-      await db.insert(financialEvents).values({
-        userId: inputData.userId,
-        entityType: "actual_expense",
-        entityId: actualExpense.id,
-        eventType: "created",
-        after: actualExpense,
-        reason: JSON.stringify(provenance),
-        sourceMessageId: initial.sourceMessageId,
-      });
+      if (!selectedAccount) {
+        return {
+          ...inputData,
+          ok: false,
+          needsConfirmation: true,
+          message:
+            spendingAccounts.length === 0
+              ? "No active checking or cash account exists for this currency. Add or identify the account before recording the payment."
+              : "Multiple checking/cash accounts could be debited. Confirm the account before recording the payment.",
+        };
+      }
 
-      await saveRecurringExpenseEvent({
-        userId: inputData.userId,
-        entityId: inputData.beforeExpense.id,
-        eventType: "paid",
-        before: inputData.beforeExpense,
-        after: inputData.beforeExpense,
-        reason: JSON.stringify(provenance),
-        sourceMessageId: initial.sourceMessageId,
+      const [latestBalance] = await db
+        .select()
+        .from(accountBalances)
+        .where(eq(accountBalances.accountId, selectedAccount.id))
+        .orderBy(desc(accountBalances.asOf), desc(accountBalances.createdAt))
+        .limit(1);
+
+      if (!latestBalance) {
+        return {
+          ...inputData,
+          ok: false,
+          needsConfirmation: true,
+          message:
+            "The selected account has no known balance. Set the account balance before recording payments from it.",
+        };
+      }
+
+      const adjustedBalanceMinor = latestBalance.amountMinor - amountMinor;
+
+      const { actualExpense, accountBalance } = await db.transaction(async (tx) => {
+        const [createdExpense] = await tx
+          .insert(actualExpenses)
+          .values({
+            userId: inputData.userId!,
+            accountId: selectedAccount.id,
+            name: inputData.beforeExpense!.name,
+            amountMinor,
+            currency,
+            spentAt,
+            source: "telegram",
+            note: [initial.note, JSON.stringify(provenance)].filter(Boolean).join("\n"),
+          })
+          .returning();
+
+        const [createdBalance] = await tx
+          .insert(accountBalances)
+          .values({
+            accountId: selectedAccount.id,
+            amountMinor: adjustedBalanceMinor,
+            asOf: spentAt,
+            source: "adjusted",
+          })
+          .returning();
+
+        await tx.insert(financialEvents).values({
+          userId: inputData.userId!,
+          entityType: "actual_expense",
+          entityId: createdExpense.id,
+          eventType: "created",
+          after: createdExpense,
+          reason: JSON.stringify(provenance),
+          sourceMessageId: initial.sourceMessageId,
+        });
+
+        await tx.insert(financialEvents).values({
+          userId: inputData.userId!,
+          entityType: "account_balance",
+          entityId: createdBalance.id,
+          eventType: "created",
+          before: {
+            accountId: selectedAccount.id,
+            amountMinor: latestBalance.amountMinor,
+          },
+          after: createdBalance,
+          reason: JSON.stringify({
+            source: "mutate-recurring-expense",
+            action: "record_payment",
+            actualExpenseId: createdExpense.id,
+            recurringExpenseId: inputData.beforeExpense!.id,
+            accountName: selectedAccount.name,
+          }),
+          sourceMessageId: initial.sourceMessageId,
+        });
+
+        await tx.insert(financialEvents).values({
+          userId: inputData.userId!,
+          entityType: "recurring_expense",
+          entityId: inputData.beforeExpense!.id,
+          eventType: "paid",
+          before: inputData.beforeExpense,
+          after: inputData.beforeExpense,
+          reason: JSON.stringify(provenance),
+          sourceMessageId: initial.sourceMessageId,
+        });
+
+        return { actualExpense: createdExpense, accountBalance: createdBalance };
       });
 
       return {
         ...inputData,
         afterExpense: inputData.beforeExpense,
         actualExpenseId: actualExpense.id,
+        actualExpenseAmountMinor: actualExpense.amountMinor,
+        accountBalanceId: accountBalance.id,
+        spendingAccount: {
+          id: selectedAccount.id,
+          name: selectedAccount.name,
+          type: selectedAccount.type,
+          currency: selectedAccount.currency,
+          latestBalanceMinor: latestBalance.amountMinor,
+        },
       };
     }
 
@@ -653,6 +768,28 @@ const buildRecurringExpenseMutationResultStep = createStep({
             totalCash: formatMoney(snapshot.totals.totalCashMinor, inputData.currency),
           }
         : undefined,
+      accountImpact:
+        inputData.action === "record_payment" &&
+        inputData.spendingAccount &&
+        inputData.actualExpenseAmountMinor !== undefined
+          ? {
+              accountId: inputData.spendingAccount.id,
+              accountName: inputData.spendingAccount.name,
+              previousBalanceMinor: inputData.spendingAccount.latestBalanceMinor,
+              adjustedBalanceMinor:
+                inputData.spendingAccount.latestBalanceMinor -
+                inputData.actualExpenseAmountMinor,
+              formattedPreviousBalance: formatMoney(
+                inputData.spendingAccount.latestBalanceMinor,
+                inputData.spendingAccount.currency,
+              ),
+              formattedAdjustedBalance: formatMoney(
+                inputData.spendingAccount.latestBalanceMinor -
+                  inputData.actualExpenseAmountMinor,
+                inputData.spendingAccount.currency,
+              ),
+            }
+          : undefined,
     };
   },
 });
