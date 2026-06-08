@@ -18,6 +18,8 @@ const profileMutationInputSchema = financialFactsPatchSchema.extend({
   sourceMessageId: z.string().optional(),
 });
 
+type ProfileMutationInput = z.infer<typeof profileMutationInputSchema>;
+
 const profileMutationStateSchema = z.object({
   ok: z.boolean(),
   mastraResourceId: z.string(),
@@ -131,7 +133,7 @@ const applyFinancialFactsStep = createStep({
   execute: async ({ inputData, getInitData }) => {
     if (!inputData.ok) return inputData;
 
-    const initial = getInitData<typeof updateFinancialProfile>();
+    const initial = getInitData<ProfileMutationInput>();
     const result = await saveFinancialFacts({
       identity: { mastraResourceId: inputData.mastraResourceId },
       sourceMessageId: initial.sourceMessageId,

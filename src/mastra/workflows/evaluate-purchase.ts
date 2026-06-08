@@ -108,6 +108,7 @@ const purchaseDecisionInputSchema = z.object({
 });
 
 type PurchaseDecisionData = z.infer<typeof purchaseDecisionDataSchema>;
+type PurchaseDecisionInput = z.infer<typeof purchaseDecisionInputSchema>;
 type PurchaseDecisionOutput = z.infer<typeof purchaseDecisionOutputSchema>;
 
 const summarizeForecast = (forecast: ForecastResult) => ({
@@ -189,7 +190,7 @@ const runBaselineForecastStep = createStep({
   execute: async ({ inputData, getInitData }) => {
     if (!inputData.ok || !inputData.userId) return inputData;
 
-    const initial = getInitData<typeof evaluatePurchase>();
+    const initial = getInitData<PurchaseDecisionInput>();
     const baseline = await runForecast({
       userId: inputData.userId,
       horizonMonths: initial.horizonMonths ?? 6,
@@ -213,7 +214,7 @@ const runPurchaseScenarioForecastStep = createStep({
     if (!inputData.ok || !inputData.userId || !inputData.scenario)
       return inputData;
 
-    const initial = getInitData<typeof evaluatePurchase>();
+    const initial = getInitData<PurchaseDecisionInput>();
     const scenarioForecast = await runForecast({
       userId: inputData.userId,
       horizonMonths: initial.horizonMonths ?? 6,

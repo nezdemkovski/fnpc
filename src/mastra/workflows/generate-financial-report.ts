@@ -13,6 +13,8 @@ const reportInputSchema = z.object({
   horizonMonths: z.number().int().min(1).max(24).default(6),
 });
 
+type ReportInput = z.infer<typeof reportInputSchema>;
+
 const forecastReportRowSchema = z.object({
   month: z.string(),
   openingFreeCash: z.string(),
@@ -167,7 +169,7 @@ const collectForecastStep = createStep({
   execute: async ({ inputData, getInitData }) => {
     if (!inputData.ok || !inputData.userId || !inputData.currency) return inputData;
 
-    const initial = getInitData<typeof generateFinancialReport>();
+    const initial = getInitData<ReportInput>();
     const forecast = await runForecast({
       userId: inputData.userId,
       horizonMonths: initial.horizonMonths ?? 6,
