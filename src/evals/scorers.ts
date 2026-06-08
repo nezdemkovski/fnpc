@@ -209,6 +209,12 @@ const recordedDebit = (output: JsonRecord): JsonRecord | undefined => {
   return recorded && isRecord(recorded.accountDebit) ? recorded.accountDebit : undefined;
 };
 
+const isoDateKey = (value: unknown): string | undefined => {
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  if (typeof value === "string") return value.slice(0, 10);
+  return undefined;
+};
+
 const rulesContainContribution = (
   output: JsonRecord,
   expected: unknown,
@@ -278,7 +284,18 @@ const expectationChecks: Record<string, (output: JsonRecord, expected: unknown) 
   },
   usesUserProvidedAmount: (output) =>
     typeof output.resolvedAmountMinor === "number" &&
-    (!Array.isArray(output.candidates) || output.candidates.length === 0),
+    !isRecord(output.resolvedCandidate),
+  explicitExpenseNamePreserved: (output) => {
+    const inputName = getPath(output, "changed.name");
+    const recordedName = getPath(output, "recordedExpense.name");
+    return typeof inputName === "string" &&
+      typeof recordedName === "string" &&
+      normalizeName(recordedName).includes(normalizeName(inputName));
+  },
+  balancePostedOnCurrentDate: (output) => {
+    const debit = recordedDebit(output);
+    return isoDateKey(debit?.balanceAsOf) === output.currentDate;
+  },
   doesNotCreateRecurringExpense: (output) => !changedMatches(output, { entityType: "recurring_expense", action: "created" }),
   amountTakenFromRecurring: (output) => output.ok === true,
   doesNotCreateDuplicate: (output) => output.ok === true,
@@ -299,6 +316,15 @@ const expectationChecks: Record<string, (output: JsonRecord, expected: unknown) 
   hasUpcomingPlans: (output) => Array.isArray(output.upcomingPlans),
   hasForecastRows: (output) => isRecord(output.forecast) && Array.isArray(output.forecast.rows),
   hasRiskMonths: (output) => isRecord(output.forecast) && Array.isArray(output.forecast.riskMonths),
+  hasRemainingObligationBreakdown: (output) =>
+    isRecord(output.forecast) &&
+    Array.isArray(output.forecast.rows) &&
+    output.forecast.rows.some(
+      (row) =>
+        isRecord(row) &&
+        Array.isArray(row.remainingObligations) &&
+        row.remainingObligations.length > 0,
+    ),
   hasBucket: (output) =>
     changedMatches(output, { entityType: "savings_bucket" }) ||
     (Array.isArray(output.afterBuckets) && output.afterBuckets.length > 0),

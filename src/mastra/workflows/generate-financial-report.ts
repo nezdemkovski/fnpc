@@ -26,6 +26,20 @@ const forecastReportRowSchema = z.object({
   closingFreeCash: z.string(),
   protectedSavings: z.string(),
   riskLevel: z.enum(["ok", "tight", "negative"]),
+  remainingObligations: z.array(
+    z.object({
+      kind: z.enum([
+        "recurring_expense",
+        "planned_expense",
+        "savings_contribution",
+        "scenario_expense",
+      ]),
+      name: z.string(),
+      amount: z.string(),
+      dueDate: z.string().optional(),
+      calculation: z.enum(["full", "prorated"]),
+    }),
+  ),
 });
 
 const reportOutputSchema = z.object({
@@ -200,6 +214,15 @@ const collectForecastStep = createStep({
           closingFreeCash: formatMoney(row.closingFreeCashMinor, inputData.currency!),
           protectedSavings: formatMoney(row.protectedSavingsMinor, inputData.currency!),
           riskLevel: row.riskLevel,
+          remainingObligations: row.remainingObligations.map((obligation) => ({
+            kind: obligation.kind,
+            name: obligation.name,
+            amount: formatMoney(obligation.amountMinor, inputData.currency!),
+            dueDate: obligation.dueDate
+              ? format(obligation.dueDate, "yyyy-MM-dd")
+              : undefined,
+            calculation: obligation.calculation,
+          })),
         })),
       },
     };

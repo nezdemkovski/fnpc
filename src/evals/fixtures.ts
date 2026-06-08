@@ -273,6 +273,18 @@ export const resetWorkflowEvalFixtures = async (definitions: EvalDatasetDefiniti
       });
     }
 
+    if (user.mastraResourceId === "eval:actual-expense:weak-match-explicit") {
+      await db.insert(recurringExpenses).values({
+        userId: user.id,
+        name: "apartment rent",
+        amountMinor: 42_000_00,
+        currency: "USD",
+        frequency: "monthly",
+        dayOfMonth: 1,
+        isEssential: true,
+      });
+    }
+
     if (user.mastraResourceId?.startsWith("eval:recurring:")) {
       await db.insert(recurringExpenses).values({
         userId: user.id,

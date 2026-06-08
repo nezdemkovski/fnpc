@@ -22,6 +22,20 @@ const forecastRowSchema = z.object({
   closingFreeCashMinor: z.number(),
   protectedSavingsMinor: z.number(),
   riskLevel: z.enum(["ok", "tight", "negative"]),
+  remainingObligations: z.array(
+    z.object({
+      kind: z.enum([
+        "recurring_expense",
+        "planned_expense",
+        "savings_contribution",
+        "scenario_expense",
+      ]),
+      name: z.string(),
+      amountMinor: z.number(),
+      dueDate: z.date().optional(),
+      calculation: z.enum(["full", "prorated"]),
+    }),
+  ),
 });
 
 const forecastSummarySchema = z.object({

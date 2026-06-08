@@ -79,6 +79,7 @@ const accountDebitSchema = z.object({
   previousBalanceMinor: z.number(),
   adjustedBalanceMinor: z.number(),
   accountBalanceId: z.string(),
+  balanceAsOf: z.date(),
 });
 
 const recordedPaymentSchema = z.object({
@@ -488,6 +489,9 @@ const applyRecurringExpenseMutationStep = createStep({
         : inputData.timezone
           ? parseUserDate(currentDateKey(inputData.timezone))
           : now;
+      const balanceAsOf = inputData.timezone
+        ? parseUserDate(currentDateKey(inputData.timezone))
+        : now;
       const provenance = {
         source: "mutate-recurring-expense",
         action: "record_payment",
@@ -528,6 +532,7 @@ const applyRecurringExpenseMutationStep = createStep({
         amountMinor,
         currency,
         spentAt,
+        balanceAsOf,
         note: initial.note,
         sourceMessageId: initial.sourceMessageId,
         provenance,

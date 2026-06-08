@@ -71,6 +71,7 @@ const recordedExpenseSchema = z.object({
   plannedExpenseId: z.string().optional(),
   accountDebit: accountDebitPlanSchema.extend({
     accountBalanceId: z.string(),
+    balanceAsOf: z.date(),
   }),
 });
 
@@ -134,6 +135,9 @@ const missingProfileSettings = (user: {
 
 const candidateKey = (candidate: Pick<MatchCandidate, "type" | "id">) =>
   `${candidate.type}:${candidate.id}`;
+
+const minimumAutofillMatchScore = 0.72;
+const minimumExplicitAmountLinkScore = 0.85;
 
 const formatCandidate = (candidate: z.infer<typeof candidateSchema>) =>
   `${candidate.name} (${formatMoney(candidate.amountMinor, candidate.currency)})`;
@@ -259,6 +263,14 @@ const resolveActualExpenseStep = createStep({
       bestCandidate &&
       secondCandidate &&
       bestCandidate.score - secondCandidate.score < 0.12;
+    const hasUserProvidedAmount = typeof initial.amount === "number";
+    const resolvedCandidate =
+      confirmedCandidate ??
+      (!hasUserProvidedAmount
+        ? bestCandidate
+        : bestCandidate && bestCandidate.score >= minimumExplicitAmountLinkScore
+          ? bestCandidate
+          : undefined);
 
     if (!initial.amount && !bestCandidate) {
       return {
@@ -272,7 +284,7 @@ const resolveActualExpenseStep = createStep({
     if (
       !initial.amount &&
       bestCandidate &&
-      bestCandidate.score < 0.72 &&
+      bestCandidate.score < minimumAutofillMatchScore &&
       !confirmedCandidate
     ) {
       return {
@@ -283,7 +295,7 @@ const resolveActualExpenseStep = createStep({
       };
     }
 
-    if (hasAmbiguousCandidate && !confirmedCandidate) {
+    if (!hasUserProvidedAmount && hasAmbiguousCandidate && !confirmedCandidate) {
       return {
         ...inputData,
         ok: false,
@@ -296,9 +308,9 @@ const resolveActualExpenseStep = createStep({
     const resolvedAmountMinor =
       typeof initial.amount === "number"
         ? majorToMinor(initial.amount)
-        : bestCandidate?.amountMinor;
+        : resolvedCandidate?.amountMinor;
     const resolvedCurrency = normalizeCurrency(
-      initial.currency ?? bestCandidate?.currency,
+      initial.currency ?? resolvedCandidate?.currency,
       inputData.currency,
     );
 
@@ -312,7 +324,7 @@ const resolveActualExpenseStep = createStep({
 
     return {
       ...inputData,
-      resolvedCandidate: bestCandidate,
+      resolvedCandidate,
       resolvedAmountMinor,
       resolvedCurrency,
     };
@@ -383,6 +395,9 @@ const applyActualExpenseStep = createStep({
       : inputData.timezone
         ? parseUserDate(currentDateKey(inputData.timezone))
         : new Date();
+    const balanceAsOf = inputData.timezone
+      ? parseUserDate(currentDateKey(inputData.timezone))
+      : new Date();
     const provenance = {
       source: "record-actual-expense",
       sourceText: initial.sourceText,
@@ -405,6 +420,7 @@ const applyActualExpenseStep = createStep({
       amountMinor: inputData.resolvedAmountMinor,
       currency: inputData.resolvedCurrency,
       spentAt,
+      balanceAsOf,
       note: initial.note,
       sourceMessageId: initial.sourceMessageId,
       provenance,

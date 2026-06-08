@@ -164,6 +164,15 @@ export const evalDatasetDefinitions: EvalDatasetDefinition[] = [
         metadata: { category: "forecast", case: "end_of_month" },
       },
       {
+        input: "How did you count the remaining monthly obligations?",
+        groundTruth: {
+          toolId: "generate-financial-report",
+          args: { reportType: "monthly" },
+          forbiddenToolIds: ["explain-financial-fact"],
+        },
+        metadata: { category: "forecast", case: "remaining_obligations_breakdown" },
+      },
+      {
         input: "I want to save 20000 USD per month into the car envelope from my existing savings contribution.",
         groundTruth: {
           toolId: "mutate-savings-plan",
@@ -478,6 +487,46 @@ export const evalDatasetDefinitions: EvalDatasetDefinition[] = [
         },
         metadata: { category: "workflow", case: "match_recurring_without_amount" },
       },
+      {
+        input: {
+          mastraResourceId: "eval:actual-expense:weak-match-explicit",
+          name: "apartment cleaning",
+          amount: 1260,
+          currency: "USD",
+          spentAt: "2026-06-01",
+          sourceMessageId: "eval-message:actual-expense-weak-match-explicit",
+        },
+        groundTruth: {
+          ok: true,
+          changed: { entityType: "actual_expense", action: "created", name: "apartment cleaning" },
+          expectations: {
+            amount: 1260,
+            usesUserProvidedAmount: true,
+            explicitExpenseNamePreserved: true,
+            debitsOperatingAccount: true,
+          },
+        },
+        metadata: { category: "workflow", case: "weak_match_does_not_rename_explicit_expense" },
+      },
+      {
+        input: {
+          mastraResourceId: "eval:actual-expense:backdated-posting",
+          name: "small appliance",
+          amount: 119,
+          currency: "USD",
+          spentAt: "2026-06-01",
+          sourceMessageId: "eval-message:actual-expense-backdated-posting",
+        },
+        groundTruth: {
+          ok: true,
+          changed: { entityType: "actual_expense", action: "created", name: "small appliance" },
+          expectations: {
+            balancePostedOnCurrentDate: true,
+            debitsOperatingAccount: true,
+          },
+        },
+        metadata: { category: "workflow", case: "backdated_expense_posts_current_balance" },
+      },
     ],
   },
   {
@@ -752,6 +801,7 @@ export const evalDatasetDefinitions: EvalDatasetDefinition[] = [
             hasFormattedTotals: true,
             hasUpcomingPlans: true,
             hasForecastRows: true,
+            hasRemainingObligationBreakdown: true,
           },
         },
         metadata: { category: "workflow", case: "daily_report" },
@@ -767,6 +817,7 @@ export const evalDatasetDefinitions: EvalDatasetDefinition[] = [
           expectations: {
             horizonMonths: 6,
             hasRiskMonths: true,
+            hasRemainingObligationBreakdown: true,
           },
         },
         metadata: { category: "workflow", case: "forecast_report" },

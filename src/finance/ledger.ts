@@ -19,6 +19,7 @@ export type AccountDebitPlan = {
 
 export type RecordedAccountDebit = AccountDebitPlan & {
   accountBalanceId: string;
+  balanceAsOf: Date;
 };
 
 export type RecordedDebitedExpense = {
@@ -137,6 +138,7 @@ export const recordDebitedActualExpense = async ({
   amountMinor,
   currency,
   spentAt,
+  balanceAsOf,
   note,
   sourceMessageId,
   provenance,
@@ -150,6 +152,7 @@ export const recordDebitedActualExpense = async ({
   amountMinor: number;
   currency: string;
   spentAt: Date;
+  balanceAsOf?: Date;
   note?: string;
   sourceMessageId?: string;
   provenance: unknown;
@@ -165,6 +168,7 @@ export const recordDebitedActualExpense = async ({
   }>;
 }): Promise<RecordedDebitedExpense> => {
   const reason = JSON.stringify(provenance);
+  const effectiveBalanceAsOf = balanceAsOf ?? spentAt;
   const { expense, balance } = await database.transaction(async (tx) => {
     const [createdExpense] = await tx
       .insert(actualExpenses)
@@ -193,7 +197,7 @@ export const recordDebitedActualExpense = async ({
       .values({
         accountId: accountDebit.accountId,
         amountMinor: accountDebit.adjustedBalanceMinor,
-        asOf: spentAt,
+        asOf: effectiveBalanceAsOf,
         source: "adjusted",
       })
       .returning();
@@ -249,6 +253,7 @@ export const recordDebitedActualExpense = async ({
     accountDebit: {
       ...accountDebit,
       accountBalanceId: balance.id,
+      balanceAsOf: balance.asOf,
     },
   };
 };

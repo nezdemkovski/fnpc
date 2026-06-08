@@ -11,6 +11,19 @@ export type ForecastRow = {
   closingFreeCashMinor: number;
   protectedSavingsMinor: number;
   riskLevel: "ok" | "tight" | "negative";
+  remainingObligations: ForecastObligationItem[];
+};
+
+export type ForecastObligationItem = {
+  kind:
+    | "recurring_expense"
+    | "planned_expense"
+    | "savings_contribution"
+    | "scenario_expense";
+  name: string;
+  amountMinor: number;
+  dueDate?: Date;
+  calculation: "full" | "prorated";
 };
 
 export type CashflowIncomeRule = {
@@ -36,6 +49,7 @@ export type CashflowRecurringExpense = {
 };
 
 export type CashflowPlannedExpense = {
+  name?: string;
   amountMinor: number;
   plannedFor: Date;
 };
@@ -213,56 +227,106 @@ export const buildCashflowForecastRows = ({
         })
         .map((rule) => rule.amountMinor),
     );
-    const recurringExpensesMinor = sum(
-      recurringExpenses
-        .filter((expense) => expense.frequency === "monthly")
-        .filter((expense) => {
-          if (
-            expenseLooksPaid({
-              name: expense.name,
-              amountMinor: expense.amountMinor,
-              actuals: monthActuals,
-            })
-          ) {
-            return false;
-          }
-          if (!expense.dayOfMonth) return true;
-          return dateInMonth(from, expense.dayOfMonth) >= periodStart;
-        })
-        .map((expense) =>
-          !expense.dayOfMonth && index === 0
+    const recurringObligations: ForecastObligationItem[] = recurringExpenses
+      .filter((expense) => expense.frequency === "monthly")
+      .filter((expense) => {
+        if (
+          expenseLooksPaid({
+            name: expense.name,
+            amountMinor: expense.amountMinor,
+            actuals: monthActuals,
+          })
+        ) {
+          return false;
+        }
+        if (!expense.dayOfMonth) return true;
+        return dateInMonth(from, expense.dayOfMonth) >= periodStart;
+      })
+      .map((expense) => {
+        const isProrated = !expense.dayOfMonth && index === 0;
+        return {
+          kind: "recurring_expense" as const,
+          name: expense.name,
+          amountMinor: isProrated
             ? prorateRemainingInMonth(expense.amountMinor, from, periodStart)
             : expense.amountMinor,
-        ),
+          dueDate: expense.dayOfMonth
+            ? dateInMonth(from, expense.dayOfMonth)
+            : undefined,
+          calculation: isProrated ? ("prorated" as const) : ("full" as const),
+        };
+      });
+    const recurringExpensesMinor = sum(
+      recurringObligations.map((obligation) => obligation.amountMinor),
     );
-    const savingsContributionsMinor = sum(
-      savingsRules.map((rule) => {
+    const savingsObligations: ForecastObligationItem[] = savingsRules.flatMap(
+      (rule) => {
         if (rule.type === "monthly_fixed") {
           if (rule.dayOfMonth && dateInMonth(from, rule.dayOfMonth) < periodStart)
-            return 0;
-          return !rule.dayOfMonth && index === 0
-            ? prorateRemainingInMonth(rule.amountMinor ?? 0, from, periodStart)
-            : rule.amountMinor ?? 0;
+            return [];
+          const isProrated = !rule.dayOfMonth && index === 0;
+          return [
+            {
+              kind: "savings_contribution" as const,
+              name: "Savings contribution",
+              amountMinor: isProrated
+                ? prorateRemainingInMonth(rule.amountMinor ?? 0, from, periodStart)
+                : rule.amountMinor ?? 0,
+              dueDate: rule.dayOfMonth
+                ? dateInMonth(from, rule.dayOfMonth)
+                : undefined,
+              calculation: isProrated ? ("prorated" as const) : ("full" as const),
+            },
+          ];
         }
 
         if (rule.type === "percentage_of_income") {
           if (rule.dayOfMonth && dateInMonth(from, rule.dayOfMonth) < periodStart)
-            return 0;
+            return [];
           const amountMinor = Math.round(
             ((ruleIncomeMinor + plannedIncomeEventsMinor) * (rule.percentBps ?? 0)) /
               10_000,
           );
-          return !rule.dayOfMonth && index === 0
-            ? prorateRemainingInMonth(amountMinor, from, periodStart)
-            : amountMinor;
+          const isProrated = !rule.dayOfMonth && index === 0;
+          return [
+            {
+              kind: "savings_contribution" as const,
+              name: "Savings contribution",
+              amountMinor: isProrated
+                ? prorateRemainingInMonth(amountMinor, from, periodStart)
+                : amountMinor,
+              dueDate: rule.dayOfMonth
+                ? dateInMonth(from, rule.dayOfMonth)
+                : undefined,
+              calculation: isProrated ? ("prorated" as const) : ("full" as const),
+            },
+          ];
         }
 
-        return 0;
-      }),
+        return [];
+      },
     );
+    const savingsContributionsMinor = sum(
+      savingsObligations.map((obligation) => obligation.amountMinor),
+    );
+    const plannedObligations: ForecastObligationItem[] = monthPlans.map((expense) => ({
+      kind: "planned_expense",
+      name: expense.name ?? "Planned expense",
+      amountMinor: expense.amountMinor,
+      dueDate: expense.plannedFor,
+      calculation: "full",
+    }));
+    const scenarioObligations: ForecastObligationItem[] =
+      matchingScenarioExpenses.map((expense) => ({
+        kind: "scenario_expense",
+        name: expense.name,
+        amountMinor: expense.amountMinor,
+        dueDate: expense.plannedFor,
+        calculation: "full",
+      }));
     const plannedExpensesMinor =
-      sum(monthPlans.map((expense) => expense.amountMinor)) +
-      sum(matchingScenarioExpenses.map((expense) => expense.amountMinor));
+      sum(plannedObligations.map((expense) => expense.amountMinor)) +
+      sum(scenarioObligations.map((expense) => expense.amountMinor));
     const actualExpensesMinor = 0;
     const incomeMinor = ruleIncomeMinor + plannedIncomeEventsMinor;
     const openingFreeCashMinor = freeCashMinor;
@@ -288,6 +352,12 @@ export const buildCashflowForecastRows = ({
       closingFreeCashMinor,
       protectedSavingsMinor,
       riskLevel: riskLevel(closingFreeCashMinor),
+      remainingObligations: [
+        ...recurringObligations,
+        ...plannedObligations,
+        ...scenarioObligations,
+        ...savingsObligations,
+      ],
     });
   }
 

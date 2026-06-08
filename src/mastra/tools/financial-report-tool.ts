@@ -6,11 +6,14 @@ import { resourceIdFromContext } from "./source-context";
 export const generateFinancialReportTool = createTool({
   id: "generate-financial-report",
   description:
-    "Use this for daily, weekly, monthly, and forecast reports. It returns current balances, operating cash, protected savings, upcoming plans, forecast rows, and risk months.",
+    "Use this for daily, weekly, monthly, forecast, remaining-obligations, and end-of-month situation reports. It returns current balances, operating cash, protected savings, upcoming plans, forecast rows, risk months, and a per-row remaining obligation breakdown.",
   inputSchema: z.object({
     reportType: z
       .enum(["daily", "weekly", "monthly", "forecast"])
-      .default("daily"),
+      .default("daily")
+      .describe(
+        'Use "monthly" for end-of-month, remaining obligations, and "what is left" questions. Use "forecast" for multi-month outlooks.',
+      ),
     horizonMonths: z.number().int().min(1).max(24).default(6),
     mastraResourceId: z
       .string()

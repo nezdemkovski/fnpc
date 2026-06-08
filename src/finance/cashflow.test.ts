@@ -58,6 +58,9 @@ describe("buildCashflowForecastRows", () => {
     );
 
     expect(rows[0]?.recurringExpensesMinor).toBe(0);
+    expect(rows[0]?.remainingObligations).not.toContainEqual(
+      expect.objectContaining({ name: "Rent" }),
+    );
     expect(rows[1]?.recurringExpensesMinor).toBe(42_000_00);
   });
 
@@ -75,6 +78,14 @@ describe("buildCashflowForecastRows", () => {
     );
 
     expect(rows[0]?.recurringExpensesMinor).toBe(23_000_00);
+    expect(rows[0]?.remainingObligations).toContainEqual(
+      expect.objectContaining({
+        kind: "recurring_expense",
+        name: "Groceries",
+        amountMinor: 23_000_00,
+        calculation: "prorated",
+      }),
+    );
     expect(rows[1]?.recurringExpensesMinor).toBe(30_000_00);
   });
 
@@ -91,6 +102,12 @@ describe("buildCashflowForecastRows", () => {
     );
 
     expect(rows[0]?.plannedExpensesMinor).toBe(15_000_00);
+    expect(rows[0]?.remainingObligations).toContainEqual(
+      expect.objectContaining({
+        kind: "planned_expense",
+        amountMinor: 15_000_00,
+      }),
+    );
   });
 
   test("does not count fixed savings contribution for current month when its day passed", () => {
