@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
-import { db, type Database } from "../db/client";
+import type { Database } from "../db/client";
 import {
   mutationAudit,
   type MutationSummary,
@@ -15,6 +15,8 @@ const CONFIRMATION_TTL_MS = 10 * 60 * 1000;
 const normalizeName = (value: string) => value.trim().toLocaleLowerCase();
 const hash = (value: string) =>
   createHash("sha256").update(value).digest("hex");
+
+const productionDatabase = async () => (await import("../db/client")).db;
 
 const exactAccount = (
   snapshot: YnabSnapshot,
@@ -70,7 +72,7 @@ export const prepareTransaction = async (
   input: PrepareTransactionInput,
   dependencies: { database?: Database; gateway?: YnabGateway; now?: Date } = {},
 ) => {
-  const database = dependencies.database ?? db;
+  const database = dependencies.database ?? (await productionDatabase());
   const gateway = dependencies.gateway ?? ynabGateway;
   const now = dependencies.now ?? new Date();
   const snapshot = await gateway.getSnapshot({ force: true });
@@ -209,7 +211,7 @@ export const commitPreparedTransaction = async (
   }: { mastraResourceId: string; confirmationToken: string },
   dependencies: { database?: Database; gateway?: YnabGateway; now?: Date } = {},
 ) => {
-  const database = dependencies.database ?? db;
+  const database = dependencies.database ?? (await productionDatabase());
   const gateway = dependencies.gateway ?? ynabGateway;
   const now = dependencies.now ?? new Date();
   const tokenHash = hash(confirmationToken);
