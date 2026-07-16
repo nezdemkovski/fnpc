@@ -22,11 +22,17 @@ const optionalClickhouseConfig = () => {
 
   const username = requiredEnv("CLICKHOUSE_USERNAME");
   const password = requiredEnv("CLICKHOUSE_PASSWORD");
+  const retentionDays = Number(process.env.CLICKHOUSE_RETENTION_DAYS ?? "14");
+
+  if (!Number.isInteger(retentionDays) || retentionDays <= 0) {
+    throw new Error("CLICKHOUSE_RETENTION_DAYS must be a positive integer");
+  }
 
   return {
     url,
     username,
     password,
+    retentionDays,
   };
 };
 
@@ -39,7 +45,7 @@ export const env = {
   model: normalizeMastraModel(process.env.AI_MODEL ?? "claude-sonnet-4-5"),
   ynab: {
     accessToken: process.env.YNAB_ACCESS_TOKEN,
-    planId: process.env.YNAB_PLAN_ID,
+    planId: process.env.YNAB_PLAN_ID ?? "last-used",
     cacheTtlMs: Number(process.env.YNAB_CACHE_TTL_MS ?? "45000"),
   },
   telegramAdapterMode: telegramAdapterMode(process.env.TELEGRAM_ADAPTER_MODE),

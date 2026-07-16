@@ -30,8 +30,10 @@ postgres:
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_WEBHOOK_SECRET_TOKEN`
 - `AUTH_SESSION_SECRET`
-- `YNAB_ACCESS_TOKEN`
-- `YNAB_PLAN_ID`
+
+`Ynab`
+
+- `token`
 
 `fnpc-clickhouse`
 
@@ -43,4 +45,10 @@ postgres:
 When ClickHouse is enabled, the chart deploys a dedicated `fnpc-clickhouse`
 StatefulSet and PVC in the `fnpc` namespace. Mastra receives `CLICKHOUSE_URL`,
 `CLICKHOUSE_USERNAME`, and `CLICKHOUSE_PASSWORD`; Postgres remains the default
-storage backend, while ClickHouse is used only for observability.
+storage backend, while ClickHouse is used only for observability. The chart
+disables ClickHouse's high-volume internal system logs and profilers, caps the
+container at 500m CPU, and retains Mastra observability data for 14 days by
+default.
+
+YNAB uses the API-supported `last-used` plan selector unless `env.ynabPlanId`
+is overridden.

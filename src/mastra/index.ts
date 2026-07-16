@@ -21,6 +21,13 @@ const storage = env.clickhouse
           url: env.clickhouse.url,
           username: env.clickhouse.username,
           password: env.clickhouse.password,
+          retention: {
+            tracing: env.clickhouse.retentionDays,
+            logs: env.clickhouse.retentionDays,
+            metrics: env.clickhouse.retentionDays,
+            scores: env.clickhouse.retentionDays,
+            feedback: env.clickhouse.retentionDays,
+          },
         }),
       },
     })
