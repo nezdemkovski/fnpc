@@ -11,7 +11,6 @@ export const updateProfileTool = createTool({
     preferredName: z.string().optional(),
     responseLanguage: z.string().optional(),
     timezone: z.string().optional(),
-    minimumComfortableReadyToAssign: z.number().min(0).optional(),
     mastraResourceId: z.string().optional(),
   }),
   execute: async (input, context) => {
@@ -21,19 +20,11 @@ export const updateProfileTool = createTool({
       return { ok: false, missingInputs: ["mastraResourceId"] };
     }
     const profile = await updateProfile({
-      identity: { mastraResourceId },
+      mastraResourceId,
       patch: {
         preferredName: input.preferredName,
         responseLanguage: input.responseLanguage,
         timezone: input.timezone,
-        financialPolicy:
-          input.minimumComfortableReadyToAssign === undefined
-            ? undefined
-            : {
-                minimumComfortableReadyToAssignMilliunits: Math.round(
-                  input.minimumComfortableReadyToAssign * 1000,
-                ),
-              },
       },
     });
 
@@ -43,7 +34,6 @@ export const updateProfileTool = createTool({
         preferredName: profile.preferredName,
         responseLanguage: profile.responseLanguage,
         timezone: profile.timezone,
-        financialPolicy: profile.financialPolicy,
       },
     };
   },

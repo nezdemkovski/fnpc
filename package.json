@@ -1,6 +1,6 @@
 {
   "name": "fnpc",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -20,13 +20,11 @@
     "@date-fns/tz": "^1.5.0",
     "@mastra/clickhouse": "^1.12.0",
     "@mastra/core": "1.51.0",
-    "@mastra/hono": "1.5.7",
     "@mastra/memory": "1.23.0",
     "@mastra/observability": "^1.16.1",
     "@mastra/pg": "^1.16.0",
     "date-fns": "^4.4.0",
     "drizzle-orm": "1.0.0-rc.4",
-    "hono": "^4.12.30",
     "jose": "^6.2.3",
     "pg": "^8.22.0",
     "ynab": "4.5.0",

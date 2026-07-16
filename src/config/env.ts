@@ -11,8 +11,17 @@ const normalizeMastraModel = (model: string): string => {
   return `anthropic/${model}`;
 };
 
-const telegramAdapterMode = (value: string | undefined): "auto" | "webhook" | "polling" | "off" => {
-  if (value === "webhook" || value === "polling" || value === "auto" || value === "off") return value;
+const telegramAdapterMode = (
+  value: string | undefined,
+): "auto" | "webhook" | "polling" | "off" => {
+  if (
+    value === "webhook" ||
+    value === "polling" ||
+    value === "auto" ||
+    value === "off"
+  ) {
+    return value;
+  }
   return "auto";
 };
 
@@ -36,19 +45,35 @@ const optionalClickhouseConfig = () => {
   };
 };
 
-const studioAuthEnabled = Boolean(process.env.AUTH_URL ?? process.env.AUTH_BASE_URL);
+const optionalAuthConfig = () => {
+  const url = process.env.AUTH_URL;
+  const realm = process.env.AUTH_REALM;
+  const sessionSecret = process.env.AUTH_SESSION_SECRET;
+
+  if (!url && !realm && !sessionSecret) return undefined;
+  if (!url) throw new Error("AUTH_URL is required when auth is configured");
+  if (!realm) throw new Error("AUTH_REALM is required when auth is configured");
+  if (!sessionSecret) {
+    throw new Error("AUTH_SESSION_SECRET is required when auth is configured");
+  }
+
+  return {
+    url: url.replace(/\/+$/, ""),
+    realm,
+    sessionSecret,
+  };
+};
 
 export const env = {
   get postgresConnection() {
     return postgresConnection();
   },
-  model: normalizeMastraModel(process.env.AI_MODEL ?? "claude-sonnet-4-5"),
+  model: normalizeMastraModel(process.env.AI_MODEL ?? "claude-opus-4-7"),
   ynab: {
     accessToken: process.env.YNAB_ACCESS_TOKEN,
     planId: process.env.YNAB_PLAN_ID ?? "last-used",
-    cacheTtlMs: Number(process.env.YNAB_CACHE_TTL_MS ?? "45000"),
   },
   telegramAdapterMode: telegramAdapterMode(process.env.TELEGRAM_ADAPTER_MODE),
   clickhouse: optionalClickhouseConfig(),
-  studioAuthEnabled,
+  auth: optionalAuthConfig(),
 };

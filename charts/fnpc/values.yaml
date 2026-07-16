@@ -2,7 +2,7 @@ replicaCount: 1
 
 image:
   repository: ghcr.io/nezdemkovski/fnpc
-  tag: "0.2.1"
+  tag: "0.3.0"
   pullPolicy: IfNotPresent
 
 env:
@@ -10,8 +10,7 @@ env:
   mastraAutoDetectUrl: "true"
   mastraHideCloudCta: "true"
   telegramAdapterMode: webhook
-  aiModel: claude-sonnet-4-6
-  ynabCacheTtlMs: "45000"
+  aiModel: claude-opus-4-7
   ynabPlanId: last-used
   auth:
     url: https://auth.nezdemkovski.cloud

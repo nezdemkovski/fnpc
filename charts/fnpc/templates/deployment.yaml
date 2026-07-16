@@ -65,8 +65,6 @@ spec:
               value: {{ .Values.env.telegramAdapterMode | quote }}
             - name: AI_MODEL
               value: {{ .Values.env.aiModel | quote }}
-            - name: YNAB_CACHE_TTL_MS
-              value: {{ .Values.env.ynabCacheTtlMs | quote }}
             - name: YNAB_PLAN_ID
               value: {{ .Values.env.ynabPlanId | quote }}
             {{- with .Values.env.auth }}

@@ -1,53 +1,42 @@
 import { eq } from "drizzle-orm";
 import { db, type Database } from "../db/client";
-import { profiles, type FinancialPolicy } from "../db/schema";
+import { profiles } from "../db/schema";
 
-export type ProfileIdentity = {
-  mastraResourceId: string;
-  telegramUserId?: string;
-  displayName?: string;
-};
-
-export type ProfilePatch = {
+type ProfilePatch = {
   preferredName?: string;
   responseLanguage?: string;
   timezone?: string;
-  financialPolicy?: FinancialPolicy;
 };
 
 export const getOrCreateProfile = async (
-  identity: ProfileIdentity,
+  mastraResourceId: string,
   database: Database = db,
 ) => {
   const [existing] = await database
     .select()
     .from(profiles)
-    .where(eq(profiles.mastraResourceId, identity.mastraResourceId))
+    .where(eq(profiles.mastraResourceId, mastraResourceId))
     .limit(1);
   if (existing) return existing;
 
   const [created] = await database
     .insert(profiles)
-    .values({
-      mastraResourceId: identity.mastraResourceId,
-      telegramUserId: identity.telegramUserId,
-      displayName: identity.displayName,
-    })
+    .values({ mastraResourceId })
     .returning();
 
   return created;
 };
 
 export const updateProfile = async ({
-  identity,
+  mastraResourceId,
   patch,
   database = db,
 }: {
-  identity: ProfileIdentity;
+  mastraResourceId: string;
   patch: ProfilePatch;
   database?: Database;
 }) => {
-  const profile = await getOrCreateProfile(identity, database);
+  const profile = await getOrCreateProfile(mastraResourceId, database);
   const [updated] = await database
     .update(profiles)
     .set({ ...patch, updatedAt: new Date() })

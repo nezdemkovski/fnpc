@@ -9,7 +9,7 @@ import {
 import { currentDateKey, isIsoDate } from "../finance/dates";
 import { formatMilliunits, majorToMilliunits } from "../finance/money";
 import { ynabGateway, type YnabGateway } from "./gateway";
-import type { YnabAccount, YnabCategory, YnabSnapshot } from "./snapshot";
+import type { Account, Category, CurrencyFormat } from "ynab";
 
 const CONFIRMATION_TTL_MS = 10 * 60 * 1000;
 const normalizeName = (value: string) => value.trim().toLocaleLowerCase();
@@ -19,11 +19,11 @@ const hash = (value: string) =>
 const productionDatabase = async () => (await import("../db/client")).db;
 
 const exactAccount = (
-  snapshot: YnabSnapshot,
+  accounts: Account[],
   id: string | undefined,
   name: string | undefined,
-): { value?: YnabAccount; candidates: YnabAccount[] } => {
-  const available = snapshot.accounts.filter((account) => !account.closed);
+): { value?: Account; candidates: Account[] } => {
+  const available = accounts.filter((account) => !account.closed && !account.deleted);
   if (id) return { value: available.find((account) => account.id === id), candidates: [] };
   if (!name) return { candidates: [] };
   const matches = available.filter(
@@ -33,27 +33,27 @@ const exactAccount = (
 };
 
 const exactCategory = (
-  snapshot: YnabSnapshot,
-  month: string,
+  categories: Category[],
   id: string | undefined,
   name: string | undefined,
-): { value?: YnabCategory; candidates: YnabCategory[] } => {
-  const available =
-    snapshot.months
-      .find((candidate) => candidate.month === month)
-      ?.categories.filter((category) => !category.hidden && !category.internal) ?? [];
+): { value?: Category; candidates: Category[] } => {
+  const available = categories.filter(
+    (category) => !category.hidden && !category.internal && !category.deleted,
+  );
   if (id) return { value: available.find((category) => category.id === id), candidates: [] };
   if (!name) return { candidates: [] };
   const normalized = normalizeName(name);
   const matches = available.filter(
     (category) =>
       normalizeName(category.name) === normalized ||
-      normalizeName(`${category.groupName} / ${category.name}`) === normalized,
+      normalizeName(
+        `${category.category_group_name ?? "Unknown group"} / ${category.name}`,
+      ) === normalized,
   );
   return { value: matches.length === 1 ? matches[0] : undefined, candidates: matches };
 };
 
-export type PrepareTransactionInput = {
+type PrepareTransactionInput = {
   mastraResourceId: string;
   sourceMessageId?: string;
   timezone: string;
@@ -75,8 +75,6 @@ export const prepareTransaction = async (
   const database = dependencies.database ?? (await productionDatabase());
   const gateway = dependencies.gateway ?? ynabGateway;
   const now = dependencies.now ?? new Date();
-  const snapshot = await gateway.getSnapshot({ force: true });
-  const month = currentDateKey(input.timezone, now).slice(0, 7);
   const date = input.date ?? currentDateKey(input.timezone, now);
   if (!isIsoDate(date)) return { ok: false as const, error: "invalid_date" };
   if (date > currentDateKey(input.timezone, now)) {
@@ -86,7 +84,18 @@ export const prepareTransaction = async (
     return { ok: false as const, error: "amount_must_be_positive" };
   }
 
-  const account = exactAccount(snapshot, input.accountId, input.accountName);
+  const month = `${date.slice(0, 7)}-01`;
+  const [accountsResponse, monthResponse, settingsResponse] = await Promise.all([
+    gateway.getAccounts(),
+    gateway.getMonth(month),
+    gateway.getPlanSettings(),
+  ]);
+
+  const account = exactAccount(
+    accountsResponse.data.accounts,
+    input.accountId,
+    input.accountName,
+  );
   if (!account.value) {
     return {
       ok: false as const,
@@ -99,8 +108,7 @@ export const prepareTransaction = async (
   }
 
   const category = exactCategory(
-    snapshot,
-    month,
+    monthResponse.data.month.categories,
     input.categoryId,
     input.categoryName,
   );
@@ -110,7 +118,7 @@ export const prepareTransaction = async (
       error: "expense_category_not_found_or_ambiguous",
       candidates: category.candidates.map((candidate) => ({
         id: candidate.id,
-        group: candidate.groupName,
+        group: candidate.category_group_name,
         name: candidate.name,
       })),
     };
@@ -146,11 +154,14 @@ export const prepareTransaction = async (
   const safeSummary: MutationSummary = {
     accountName: account.value.name,
     categoryName: category.value
-      ? `${category.value.groupName} / ${category.value.name}`
+      ? `${category.value.category_group_name ?? "Unknown group"} / ${category.value.name}`
       : undefined,
     payeeName: request.payeeName,
     date,
-    amount: formatMilliunits(Math.abs(amountMilliunits), snapshot.currency),
+    amount: formatMilliunits(
+      Math.abs(amountMilliunits),
+      settingsResponse.data.settings.currency_format as CurrencyFormat,
+    ),
     direction: input.direction,
   };
 
@@ -246,19 +257,24 @@ export const commitPreparedTransaction = async (
       return { ok: false as const, error: "confirmation_expired" };
     }
 
-    const snapshot = await gateway.getSnapshot({ force: true });
-    const account = snapshot.accounts.find(
-      (candidate) => candidate.id === audit.request.accountId && !candidate.closed,
-    );
-    const category = audit.request.categoryId
-      ? snapshot.months
-          .flatMap((month) => month.categories)
-          .find(
-            (candidate) =>
-              candidate.id === audit.request.categoryId && !candidate.hidden,
-          )
+    const categoryRequest = audit.request.categoryId
+      ? gateway.getMonthCategory(
+          `${audit.request.date.slice(0, 7)}-01`,
+          audit.request.categoryId,
+        )
       : undefined;
-    if (!account || (audit.request.categoryId && !category)) {
+    const [accountResponse, categoryResponse] = await Promise.all([
+      gateway.getAccount(audit.request.accountId),
+      categoryRequest,
+    ]);
+    const account = accountResponse.data.account;
+    const category = categoryResponse?.data.category;
+    if (
+      account.deleted ||
+      account.closed ||
+      (audit.request.categoryId &&
+        (!category || category.deleted || category.hidden))
+    ) {
       return { ok: false as const, error: "ynab_reference_changed" };
     }
 
@@ -273,8 +289,9 @@ export const commitPreparedTransaction = async (
       approved: false,
       import_id: audit.request.importId,
     });
-    const ynabTransactionId = result.transaction?.id ?? result.transaction_ids[0];
-    const duplicate = result.duplicate_import_ids?.includes(
+    const ynabTransactionId =
+      result.data.transaction?.id ?? result.data.transaction_ids[0];
+    const duplicate = result.data.duplicate_import_ids?.includes(
       audit.request.importId,
     );
 

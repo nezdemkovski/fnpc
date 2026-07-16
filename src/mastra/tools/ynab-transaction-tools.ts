@@ -38,7 +38,7 @@ export const prepareTransactionTool = createTool({
     if (!mastraResourceId) {
       return { ok: false, missingInputs: ["mastraResourceId"] };
     }
-    const profile = await getOrCreateProfile({ mastraResourceId });
+    const profile = await getOrCreateProfile(mastraResourceId);
     if (!profile.timezone) {
       return { ok: false, missingInputs: ["timezone"] };
     }

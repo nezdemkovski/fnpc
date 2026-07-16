@@ -1,66 +1,78 @@
 import { describe, expect, test } from "bun:test";
 import type { Database } from "../db/client";
-import type { MutationAudit } from "../db/schema";
+import { mutationAudit } from "../db/schema";
 import type { YnabGateway } from "./gateway";
-import type { YnabSnapshot } from "./snapshot";
 import {
   commitPreparedTransaction,
   prepareTransaction,
 } from "./transaction-service";
 
-const snapshot: YnabSnapshot = {
-  planId: "plan-1",
-  planName: "Personal",
-  serverKnowledge: 1,
-  fetchedAt: "2026-07-16T12:00:00.000Z",
-  currency: {
-    iso_code: "EUR",
-    example_format: "123.45",
-    decimal_digits: 2,
-    decimal_separator: ".",
-    symbol_first: true,
-    group_separator: ",",
-    currency_symbol: "€",
-    display_symbol: true,
-  },
-  accounts: [
-    {
-      id: "account-1",
-      name: "Checking",
-      type: "checking",
-      onBudget: true,
-      closed: false,
-      balance: 100_000,
-      clearedBalance: 100_000,
-      unclearedBalance: 0,
-      directImportLinked: false,
-      directImportInError: false,
+type MutationAudit = typeof mutationAudit.$inferSelect;
+
+const account = {
+  id: "account-1",
+  name: "Checking",
+  type: "checking",
+  on_budget: true,
+  closed: false,
+  balance: 100_000,
+  cleared_balance: 100_000,
+  uncleared_balance: 0,
+  transfer_payee_id: "transfer-account-1",
+  deleted: false,
+};
+
+const category = {
+  id: "category-1",
+  category_group_id: "group-1",
+  category_group_name: "Needs",
+  name: "Groceries",
+  hidden: false,
+  internal: false,
+  budgeted: 50_000,
+  activity: 0,
+  balance: 50_000,
+  deleted: false,
+};
+
+const currency = {
+  iso_code: "EUR",
+  example_format: "123.45",
+  decimal_digits: 2,
+  decimal_separator: ".",
+  symbol_first: true,
+  group_separator: ",",
+  currency_symbol: "€",
+  display_symbol: true,
+};
+
+const endpointReads = {
+  getAccounts: async () => ({
+    data: { accounts: [account], server_knowledge: 1 },
+  }),
+  getMonth: async () => ({
+    data: {
+      month: {
+        month: "2026-07-01",
+        income: 0,
+        budgeted: 50_000,
+        activity: 0,
+        to_be_budgeted: 0,
+        deleted: false,
+        categories: [category],
+      },
     },
-  ],
-  months: [
-    {
-      month: "2026-07",
-      income: 0,
-      budgeted: 50_000,
-      activity: 0,
-      readyToAssign: 0,
-      categories: [
-        {
-          id: "category-1",
-          groupId: "group-1",
-          groupName: "Needs",
-          name: "Groceries",
-          hidden: false,
-          internal: false,
-          budgeted: 50_000,
-          activity: 0,
-          balance: 50_000,
-        },
-      ],
+  }),
+  getPlanSettings: async () => ({
+    data: {
+      settings: {
+        currency_format: currency,
+        date_format: { format: "MM/DD/YYYY" },
+      },
     },
-  ],
-  transactions: [],
-  scheduledTransactions: [],
+  }),
+  getAccount: async () => ({ data: { account } }),
+  getMonthCategory: async () => ({ data: { category } }),
 };
 
 class FakeDatabase {
@@ -112,17 +124,19 @@ class FakeDatabase {
 }
 
 describe("guarded YNAB transaction writes", () => {
-  test("prepares, confirms, writes unapproved once, and remains idempotent", async () => {
+  test("prepares from endpoint reads, confirms, and writes unapproved once", async () => {
     const database = new FakeDatabase();
     const writes: Array<Record<string, unknown>> = [];
     const gateway = {
-      getSnapshot: async () => snapshot,
+      ...endpointReads,
       createTransaction: async (transaction: Record<string, unknown>) => {
         writes.push(transaction);
         return {
-          transaction_ids: ["ynab-transaction-1"],
-          transaction: { id: "ynab-transaction-1" },
-          server_knowledge: 2,
+          data: {
+            transaction_ids: ["ynab-transaction-1"],
+            transaction: { id: "ynab-transaction-1" },
+            server_knowledge: 2,
+          },
         };
       },
     };
@@ -209,7 +223,7 @@ describe("guarded YNAB transaction writes", () => {
       },
       {
         database: database as unknown as Database,
-        gateway: { getSnapshot: async () => snapshot } as unknown as YnabGateway,
+        gateway: endpointReads as unknown as YnabGateway,
         now: new Date("2026-07-16T12:00:00.000Z"),
       },
     );

@@ -1,8 +1,8 @@
 import type { CurrencyFormat } from "ynab";
 
-export type Milliunits = number & { readonly __brand: "Milliunits" };
+type Milliunits = number & { readonly __brand: "Milliunits" };
 
-export const asMilliunits = (value: number): Milliunits => {
+const asMilliunits = (value: number): Milliunits => {
   if (!Number.isSafeInteger(value)) {
     throw new Error(`Invalid YNAB milliunits value: ${value}`);
   }
@@ -14,7 +14,7 @@ export const majorToMilliunits = (amount: number): Milliunits => {
   return asMilliunits(Math.round(amount * 1000));
 };
 
-export const milliunitsToMajor = (amount: number): number => amount / 1000;
+const milliunitsToMajor = (amount: number): number => amount / 1000;
 
 export const formatMilliunits = (
   amount: number,

@@ -5,54 +5,91 @@ import { env } from "../../config/env";
 import { RuntimeProfileProcessor } from "../processors/runtime-profile-processor";
 import { updateProfileTool } from "../tools/profile-tool";
 import {
-  evaluatePurchaseTool,
-  getBudgetOverviewTool,
-  getSpendingAnalysisTool,
+  getAccountTool,
+  getCategoryTool,
+  getMonthCategoryTool,
+  getMonthTool,
+  getPayeeTool,
+  getPlanSettingsTool,
+  getScheduledTransactionTool,
+  getTransactionTool,
+  listAccountsTool,
+  listAccountTransactionsTool,
+  listCategoriesTool,
+  listCategoryTransactionsTool,
+  listMonthsTool,
+  listMonthTransactionsTool,
+  listPayeesTool,
+  listPayeeTransactionsTool,
+  listScheduledTransactionsTool,
   listTransactionsTool,
-  listBudgetIssuesTool,
-} from "../tools/ynab-read-tools";
+} from "../tools/ynab";
 import {
   commitTransactionTool,
   prepareTransactionTool,
 } from "../tools/ynab-transaction-tools";
 
 const instructions = `
-You are FNPC, a personal finance sanity-check assistant backed by the user's real YNAB plan.
+You are FNPC, a personal finance assistant backed by the user's real YNAB plan.
 
-YNAB is the only source of truth for accounts, balances, categories, targets, transactions,
-scheduled transactions, payees, and monthly budget state. Never invent or reconstruct those facts
-from conversation memory. Local storage contains only communication preferences, policy, and mutation audit.
+Architecture and source-of-truth rules:
+- YNAB is the only source of truth for financial facts.
+- Conversation history, observational memory, working memory, and the local profile may contain preferences and goals, but never authoritative balances, category amounts, transactions, targets, or schedules.
+- No YNAB snapshot is preloaded. Before stating any current or historical financial fact, call the narrow YNAB endpoint tool that supplies it in this turn.
+- Each YNAB tool maps to one provider endpoint. Compose several tools when a question crosses resources. Do arithmetic only from returned endpoint data and show the important inputs.
+- If an endpoint fails, say that the required YNAB data is unavailable. Never substitute a remembered number.
+- If a transaction result is truncated, narrow the date range or use a scoped endpoint instead of extrapolating.
 
-Use deterministic tools before answering any question involving current money, spending, affordability,
-budget health, categories, transactions, or arithmetic:
-- getBudgetOverviewTool for the current plan, category availability, accounts, and scheduled transactions.
-- listBudgetIssuesTool for overspending, underfunding, categorization, approval, and import problems.
-- getSpendingAnalysisTool for actual historical spending.
-- listTransactionsTool for exact transactions in an account or category, including transfers.
-- evaluatePurchaseTool for purchase decisions. A purchase is funded by a category, not by an account balance.
-
-The runtime context contains a compact snapshot fetched immediately before this turn. It supersedes
-all financial numbers from conversation memory. Use detailed tools whenever the question needs data
-that is not present in the compact snapshot. If the runtime snapshot is unavailable, do not quote old
-balances or category values from memory; explain that current YNAB data could not be refreshed.
+Endpoint selection:
+- Plan formatting: getPlanSettingsTool.
+- Accounts: listAccountsTool to discover IDs; getAccountTool for one account.
+- Categories: listCategoriesTool to discover IDs and current-month values; getCategoryTool for one current category; getMonthCategoryTool for one category in a specific month.
+- Months: listMonthsTool for monthly totals; getMonthTool for one month's category state.
+- Payees: listPayeesTool to discover IDs; getPayeeTool for one payee.
+- Scheduled transactions: listScheduledTransactionsTool or getScheduledTransactionTool.
+- Transactions: listTransactionsTool for plan-wide date/review filters; use listAccountTransactionsTool, listCategoryTransactionsTool, listMonthTransactionsTool, or listPayeeTransactionsTool when the question names that scope; getTransactionTool for one ID.
+- Resolve names to IDs with the relevant list tool first. Do not guess IDs and do not hide entity resolution inside another tool.
 
 YNAB semantics:
 - Accounts describe where money is. Categories describe what money is for.
 - Ready to Assign is unassigned money, not automatically free cash.
-- A savings account balance is not proof that the money is safe to spend; category availability controls that.
-- Do not double-count a category target and a scheduled transaction as two separate obligations.
-- Do not claim to forecast future balances beyond what current YNAB categories, targets, and schedules support.
+- Account balance alone never proves that a purchase is affordable. Check the intended category's available amount for the relevant month.
+- Do not double-count a target and a scheduled transaction as separate obligations without explaining why.
+- Do not forecast beyond what returned categories, targets, transactions, and schedules support.
 
-Transaction writes are deliberately two-step:
+Transaction writes are a guarded workflow rather than a raw provider tool:
 1. Use prepareTransactionTool only after account, category, payee, amount, direction, and date are known.
 2. Show the exact returned summary and ask for explicit confirmation.
 3. Never call commitTransactionTool in the same assistant turn as prepareTransactionTool.
 4. On explicit confirmation, pass the returned token to commitTransactionTool.
-Transactions are created unapproved so YNAB remains the final review surface.
+5. Transactions are created unapproved so YNAB remains the final review surface.
 
 For onboarding, ask only for missing language and timezone, then save them with updateProfileTool.
-The plan currency always comes from YNAB. Keep answers direct, explain calculations using tool output,
-answer in the user's language, and do not add motivational filler.
+Answer in the user's language. Keep answers direct and explain calculations without motivational filler.
+`;
+
+const durableMemoryTemplate = `# Durable user context
+
+## Communication
+- Preferred name:
+- Language:
+- Response style:
+
+## Decision preferences
+- Risk tolerance:
+- Purchase decision criteria:
+- Planning preferences:
+
+## Long-term goals
+- Goals:
+- Constraints:
+
+## Recurring context
+- Relevant non-financial background:
+- Open follow-ups:
+
+Never store current or historical YNAB balances, category amounts, transactions, targets,
+schedules, account IDs, category IDs, or payee IDs here. Those facts must be read from YNAB.
 `;
 
 export const financialAgent = new Agent({
@@ -60,13 +97,29 @@ export const financialAgent = new Agent({
   name: "Financial Nonsense Prevention Committee",
   instructions,
   model: env.model,
+  defaultOptions: {
+    maxSteps: 12,
+  },
   inputProcessors: [new RuntimeProfileProcessor()],
   tools: {
-    getBudgetOverviewTool,
-    listBudgetIssuesTool,
-    getSpendingAnalysisTool,
+    getPlanSettingsTool,
+    listAccountsTool,
+    getAccountTool,
+    listCategoriesTool,
+    getCategoryTool,
+    getMonthCategoryTool,
+    listMonthsTool,
+    getMonthTool,
+    listPayeesTool,
+    getPayeeTool,
+    listScheduledTransactionsTool,
+    getScheduledTransactionTool,
     listTransactionsTool,
-    evaluatePurchaseTool,
+    listAccountTransactionsTool,
+    listCategoryTransactionsTool,
+    listMonthTransactionsTool,
+    listPayeeTransactionsTool,
+    getTransactionTool,
     prepareTransactionTool,
     commitTransactionTool,
     updateProfileTool,
@@ -83,6 +136,27 @@ export const financialAgent = new Agent({
     options: {
       lastMessages: 40,
       generateTitle: true,
+      workingMemory: {
+        enabled: true,
+        scope: "resource",
+        template: durableMemoryTemplate,
+      },
+      observationalMemory: {
+        model: env.model,
+        scope: "resource",
+        temporalMarkers: true,
+        observation: {
+          messageTokens: 12_000,
+          manageWorkingMemory: true,
+          instruction:
+            "Preserve the user's preferences, decision criteria, goals, explanations, and unresolved follow-ups. Never preserve YNAB financial values or entity IDs as durable facts; YNAB endpoint tools must refresh them.",
+        },
+        reflection: {
+          observationTokens: 36_000,
+          instruction:
+            "Consolidate durable personal preferences and goals. Remove financial facts that can become stale and keep YNAB as the sole financial source of truth.",
+        },
+      },
     },
   }),
 });

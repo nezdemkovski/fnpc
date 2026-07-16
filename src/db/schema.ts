@@ -9,10 +9,6 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-export type FinancialPolicy = {
-  minimumComfortableReadyToAssignMilliunits?: number;
-};
-
 export type PendingTransactionRequest = {
   accountId: string;
   categoryId?: string;
@@ -50,24 +46,15 @@ export const profiles = pgTable(
   {
     id: idColumn(),
     mastraResourceId: text("mastra_resource_id").notNull(),
-    telegramUserId: text("telegram_user_id"),
-    displayName: text("display_name"),
     preferredName: text("preferred_name"),
     responseLanguage: text("response_language"),
     timezone: text("timezone"),
-    financialPolicy: jsonb("financial_policy")
-      .$type<FinancialPolicy>()
-      .notNull()
-      .default({}),
     createdAt: createdAtColumn(),
     updatedAt: updatedAtColumn(),
   },
   (table) => [
     uniqueIndex("fnpc_profiles_mastra_resource_id_idx").on(
       table.mastraResourceId,
-    ),
-    uniqueIndex("fnpc_profiles_telegram_user_id_idx").on(
-      table.telegramUserId,
     ),
   ],
 );
@@ -108,7 +95,3 @@ export const mutationAudit = pgTable(
     ),
   ],
 );
-
-export type Profile = typeof profiles.$inferSelect;
-export type NewProfile = typeof profiles.$inferInsert;
-export type MutationAudit = typeof mutationAudit.$inferSelect;

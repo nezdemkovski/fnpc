@@ -1,7 +1,11 @@
 import { Mastra } from "@mastra/core";
 import { MastraCompositeStore } from "@mastra/core/storage";
 import { ObservabilityStorageClickhouseVNext } from "@mastra/clickhouse";
-import { MastraStorageExporter, Observability, SensitiveDataFilter } from "@mastra/observability";
+import {
+  MastraStorageExporter,
+  Observability,
+  SensitiveDataFilter,
+} from "@mastra/observability";
 import { PostgresStore } from "@mastra/pg";
 import { env } from "../config/env";
 import { financialAgent } from "./agents/financial-agent";
@@ -45,9 +49,13 @@ export const mastra = new Mastra({
       },
     },
   }),
-  server: env.studioAuthEnabled
+  server: env.auth
     ? {
-        auth: new MastraAuthRealm(),
+        auth: new MastraAuthRealm({
+          authUrl: env.auth.url,
+          realm: env.auth.realm,
+          sessionSecret: env.auth.sessionSecret,
+        }),
       }
     : undefined,
 });

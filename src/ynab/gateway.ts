@@ -1,10 +1,18 @@
 import * as ynab from "ynab";
 import { env } from "../config/env";
-import { buildYnabSnapshot, type YnabSnapshot } from "./snapshot";
 
-type YnabClient = Pick<ynab.API, "plans" | "transactions">;
+type YnabClient = Pick<
+  ynab.API,
+  | "plans"
+  | "accounts"
+  | "categories"
+  | "months"
+  | "payees"
+  | "scheduledTransactions"
+  | "transactions"
+>;
 
-export type YnabErrorCode =
+type YnabErrorCode =
   | "authentication_failed"
   | "access_denied"
   | "not_found"
@@ -12,7 +20,7 @@ export type YnabErrorCode =
   | "ynab_unavailable"
   | "invalid_request";
 
-export class YnabGatewayError extends Error {
+class YnabGatewayError extends Error {
   constructor(
     readonly code: YnabErrorCode,
     readonly status?: number,
@@ -43,15 +51,19 @@ export const toYnabGatewayError = (error: unknown): YnabGatewayError => {
   return new YnabGatewayError("ynab_unavailable");
 };
 
+export type TransactionQuery = {
+  sinceDate?: string;
+  untilDate?: string;
+  type?: ynab.GetTransactionsTypeEnum;
+};
+
 export class YnabGateway {
   private client?: YnabClient;
-  private cache?: { expiresAt: number; snapshot: YnabSnapshot };
 
   constructor(
     private readonly options: {
       accessToken?: string;
       planId?: string;
-      cacheTtlMs: number;
       client?: YnabClient;
     },
   ) {
@@ -70,37 +82,155 @@ export class YnabGateway {
     return { client: this.client, planId: this.options.planId };
   }
 
-  async getSnapshot({ force = false }: { force?: boolean } = {}) {
-    if (!force && this.cache && this.cache.expiresAt > Date.now()) {
-      return this.cache.snapshot;
-    }
+  private request<T>(operation: () => Promise<T>) {
+    return operation().catch((error) => Promise.reject(toYnabGatewayError(error)));
+  }
 
+  async getPlanSettings() {
     const { client, planId } = this.configuration();
-    const response = await client.plans
-      .getPlanById(planId)
-      .catch((error) => Promise.reject(toYnabGatewayError(error)));
-    const snapshot = buildYnabSnapshot({
-      plan: response.data.plan,
-      serverKnowledge: response.data.server_knowledge,
-    });
-    this.cache = {
-      expiresAt: Date.now() + this.options.cacheTtlMs,
-      snapshot,
-    };
-    return snapshot;
+    return this.request(() => client.plans.getPlanSettingsById(planId));
+  }
+
+  async getAccounts() {
+    const { client, planId } = this.configuration();
+    return this.request(() => client.accounts.getAccounts(planId));
+  }
+
+  async getAccount(accountId: string) {
+    const { client, planId } = this.configuration();
+    return this.request(() => client.accounts.getAccountById(planId, accountId));
+  }
+
+  async getCategories() {
+    const { client, planId } = this.configuration();
+    return this.request(() => client.categories.getCategories(planId));
+  }
+
+  async getCategory(categoryId: string) {
+    const { client, planId } = this.configuration();
+    return this.request(() => client.categories.getCategoryById(planId, categoryId));
+  }
+
+  async getMonthCategory(month: string, categoryId: string) {
+    const { client, planId } = this.configuration();
+    return this.request(() =>
+      client.categories.getMonthCategoryById(planId, month, categoryId),
+    );
+  }
+
+  async getMonths() {
+    const { client, planId } = this.configuration();
+    return this.request(() => client.months.getPlanMonths(planId));
+  }
+
+  async getMonth(month: string) {
+    const { client, planId } = this.configuration();
+    return this.request(() => client.months.getPlanMonth(planId, month));
+  }
+
+  async getPayees() {
+    const { client, planId } = this.configuration();
+    return this.request(() => client.payees.getPayees(planId));
+  }
+
+  async getPayee(payeeId: string) {
+    const { client, planId } = this.configuration();
+    return this.request(() => client.payees.getPayeeById(planId, payeeId));
+  }
+
+  async getScheduledTransactions() {
+    const { client, planId } = this.configuration();
+    return this.request(() =>
+      client.scheduledTransactions.getScheduledTransactions(planId),
+    );
+  }
+
+  async getScheduledTransaction(scheduledTransactionId: string) {
+    const { client, planId } = this.configuration();
+    return this.request(() =>
+      client.scheduledTransactions.getScheduledTransactionById(
+        planId,
+        scheduledTransactionId,
+      ),
+    );
+  }
+
+  async getTransactions(query: TransactionQuery = {}) {
+    const { client, planId } = this.configuration();
+    return this.request(() =>
+      client.transactions.getTransactions(
+        planId,
+        query.sinceDate,
+        query.untilDate,
+        query.type,
+      ),
+    );
+  }
+
+  async getAccountTransactions(accountId: string, query: TransactionQuery = {}) {
+    const { client, planId } = this.configuration();
+    return this.request(() =>
+      client.transactions.getTransactionsByAccount(
+        planId,
+        accountId,
+        query.sinceDate,
+        query.untilDate,
+        query.type,
+      ),
+    );
+  }
+
+  async getCategoryTransactions(categoryId: string, query: TransactionQuery = {}) {
+    const { client, planId } = this.configuration();
+    return this.request(() =>
+      client.transactions.getTransactionsByCategory(
+        planId,
+        categoryId,
+        query.sinceDate,
+        query.untilDate,
+        query.type,
+      ),
+    );
+  }
+
+  async getMonthTransactions(month: string, query: TransactionQuery = {}) {
+    const { client, planId } = this.configuration();
+    return this.request(() =>
+      client.transactions.getTransactionsByMonth(
+        planId,
+        month,
+        query.sinceDate,
+        query.untilDate,
+        query.type,
+      ),
+    );
+  }
+
+  async getPayeeTransactions(payeeId: string, query: TransactionQuery = {}) {
+    const { client, planId } = this.configuration();
+    return this.request(() =>
+      client.transactions.getTransactionsByPayee(
+        planId,
+        payeeId,
+        query.sinceDate,
+        query.untilDate,
+        query.type,
+      ),
+    );
+  }
+
+  async getTransaction(transactionId: string) {
+    const { client, planId } = this.configuration();
+    return this.request(() =>
+      client.transactions.getTransactionById(planId, transactionId),
+    );
   }
 
   async createTransaction(transaction: ynab.NewTransaction) {
     const { client, planId } = this.configuration();
-    const response = await client.transactions
-      .createTransaction(planId, { transaction })
-      .catch((error) => Promise.reject(toYnabGatewayError(error)));
-    this.invalidate();
-    return response.data;
-  }
-
-  invalidate() {
-    this.cache = undefined;
+    return this.request(() =>
+      client.transactions.createTransaction(planId, { transaction }),
+    );
   }
 }
 

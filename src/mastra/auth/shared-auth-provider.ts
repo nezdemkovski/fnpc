@@ -1,26 +1,29 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { createRemoteJWKSet, jwtVerify } from "jose";
-import { MastraAuthProvider } from "@mastra/core/server";
+import {
+  getRequestHeader,
+  MastraAuthProvider,
+  type MastraAuthRequest,
+} from "@mastra/core/server";
 import type {
   ISSOProvider,
   ISessionProvider,
   Session,
   User,
 } from "@mastra/core/auth";
-import type { HonoRequest } from "hono";
 
-export interface MastraAuthRealmOptions {
-  authUrl?: string;
-  realm?: string;
-  sessionSecret?: string;
+type MastraAuthRealmOptions = {
+  authUrl: string;
+  realm: string;
+  sessionSecret: string;
   name?: string;
-}
+};
 
 type NormalizedConfig = {
   baseUrl: string;
   jwksUrl: string;
   issuer: string;
-  audience: string;
+  audience: string[];
   sessionSecret: string;
 };
 
@@ -55,17 +58,11 @@ export class MastraAuthRealm
   private readonly jwks: ReturnType<typeof createRemoteJWKSet>;
   private callbackCookieHeader = "";
 
-  constructor(options: MastraAuthRealmOptions = {}) {
+  constructor(options: MastraAuthRealmOptions) {
     super({ name: options.name ?? "realm-auth" });
 
-    const { authUrl, realm } = resolveAuthTarget(options);
-    const sessionSecret =
-      options.sessionSecret ?? process.env.AUTH_SESSION_SECRET;
-    if (!sessionSecret) {
-      throw new Error(
-        "A session secret is required: pass `sessionSecret` or set AUTH_SESSION_SECRET.",
-      );
-    }
+    const authUrl = options.authUrl.replace(/\/+$/, "");
+    const { realm, sessionSecret } = options;
 
     const issuer = `${authUrl}/api/${realm}`;
     const baseUrl = `${issuer}/auth`;
@@ -76,7 +73,7 @@ export class MastraAuthRealm
       baseUrl,
       jwksUrl: `${baseUrl}/.well-known/jwks.json`,
       issuer,
-      audience: [realm, issuer].join(","),
+      audience: [realm, issuer],
       sessionSecret,
     };
     this.jwks = createRemoteJWKSet(new URL(this.config.jwksUrl));
@@ -171,11 +168,11 @@ export class MastraAuthRealm
     };
   }
 
-  async authenticateToken(token: string, request: HonoRequest) {
+  async authenticateToken(token: string, request: MastraAuthRequest) {
     const bearerUser = await this.verifyJwtOrNull(token);
     if (bearerUser) return bearerUser;
 
-    const cookieHeader = requestHeader(request, "cookie");
+    const cookieHeader = getRequestHeader(request, "cookie") ?? "";
     const sessionCookie =
       token || parseCookie(cookieHeader).get(MASTRA_SESSION_COOKIE) || "";
     const session = await this.validateSession(sessionCookie);
@@ -331,7 +328,7 @@ export class MastraAuthRealm
   private async verifyJwt(token: string): Promise<SharedAuthUser> {
     const { payload } = await jwtVerify(token, this.jwks, {
       issuer: this.config.issuer,
-      audience: this.acceptedAudiences(),
+      audience: this.config.audience,
     });
 
     if (!payload.sub) {
@@ -344,16 +341,6 @@ export class MastraAuthRealm
       name: typeof payload.name === "string" ? payload.name : undefined,
       emailVerified: payload.email_verified === true,
     };
-  }
-
-  private acceptedAudiences() {
-    const audiences = this.config.audience
-      .split(",")
-      .map((value) => value.trim())
-      .filter(Boolean);
-    if (audiences.length === 0) return undefined;
-    if (audiences.length === 1) return audiences[0];
-    return audiences;
   }
 
   private pkceVerifier(redirectUri: string, state: string) {
@@ -419,28 +406,6 @@ export class MastraAuthRealm
   }
 }
 
-const resolveAuthTarget = (options: MastraAuthRealmOptions) => {
-  const explicitUrl = options.authUrl ?? process.env.AUTH_URL;
-  const explicitRealm = options.realm ?? process.env.AUTH_REALM;
-  if (explicitUrl && explicitRealm) {
-    return { authUrl: explicitUrl.replace(/\/+$/, ""), realm: explicitRealm };
-  }
-
-  const baseUrl = process.env.AUTH_BASE_URL;
-  if (baseUrl) {
-    const url = new URL(baseUrl);
-    const match = url.pathname.match(/^\/api\/([^/]+)\/auth\/?$/);
-    if (match) {
-      return { authUrl: url.origin, realm: explicitRealm ?? match[1] };
-    }
-  }
-
-  throw new Error(
-    "Auth target is required: set `authUrl`+`realm` (or AUTH_URL+AUTH_REALM), " +
-      "or AUTH_BASE_URL=https://host/api/<realm>/auth.",
-  );
-};
-
 const parseCookie = (header: string) => {
   const result = new Map<string, string>();
   for (const part of header.split(";")) {
@@ -449,14 +414,4 @@ const parseCookie = (header: string) => {
     result.set(name, decodeURIComponent(value.join("=")));
   }
   return result;
-};
-
-const requestHeader = (request: HonoRequest | Request, name: string) => {
-  if ("header" in request && typeof request.header === "function") {
-    return request.header(name) ?? "";
-  }
-  if ("headers" in request && typeof request.headers?.get === "function") {
-    return request.headers.get(name) ?? "";
-  }
-  return "";
 };
