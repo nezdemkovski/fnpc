@@ -8,6 +8,7 @@ import {
   evaluatePurchaseTool,
   getBudgetOverviewTool,
   getSpendingAnalysisTool,
+  listTransactionsTool,
   listBudgetIssuesTool,
 } from "../tools/ynab-read-tools";
 import {
@@ -27,7 +28,13 @@ budget health, categories, transactions, or arithmetic:
 - getBudgetOverviewTool for the current plan, category availability, accounts, and scheduled transactions.
 - listBudgetIssuesTool for overspending, underfunding, categorization, approval, and import problems.
 - getSpendingAnalysisTool for actual historical spending.
+- listTransactionsTool for exact transactions in an account or category, including transfers.
 - evaluatePurchaseTool for purchase decisions. A purchase is funded by a category, not by an account balance.
+
+The runtime context contains a compact snapshot fetched immediately before this turn. It supersedes
+all financial numbers from conversation memory. Use detailed tools whenever the question needs data
+that is not present in the compact snapshot. If the runtime snapshot is unavailable, do not quote old
+balances or category values from memory; explain that current YNAB data could not be refreshed.
 
 YNAB semantics:
 - Accounts describe where money is. Categories describe what money is for.
@@ -58,6 +65,7 @@ export const financialAgent = new Agent({
     getBudgetOverviewTool,
     listBudgetIssuesTool,
     getSpendingAnalysisTool,
+    listTransactionsTool,
     evaluatePurchaseTool,
     prepareTransactionTool,
     commitTransactionTool,

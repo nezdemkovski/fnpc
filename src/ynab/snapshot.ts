@@ -60,6 +60,7 @@ export type YnabTransaction = {
   categoryName?: string;
   categoryGroupName?: string;
   transferAccountId?: string;
+  transferTransactionId?: string;
   importId?: string;
 };
 
@@ -203,6 +204,8 @@ export const buildYnabSnapshot = ({
           categoryName: category?.name,
           categoryGroupName: category?.groupName,
           transferAccountId: transaction.transfer_account_id ?? undefined,
+          transferTransactionId:
+            transaction.transfer_transaction_id ?? undefined,
           importId: transaction.import_id ?? undefined,
         };
       }),

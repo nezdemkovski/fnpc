@@ -6,6 +6,7 @@ import {
   evaluatePurchase,
   getBudgetOverview,
   getSpendingAnalysis,
+  listTransactions,
   listBudgetIssues,
 } from "../../ynab/analysis";
 import { ynabGateway } from "../../ynab/gateway";
@@ -100,6 +101,59 @@ export const getSpendingAnalysisTool = createTool({
       ...getSpendingAnalysis(snapshot, {
         timezone: profile.timezone,
         days: input.days ?? 30,
+      }),
+    };
+  },
+});
+
+export const listTransactionsTool = createTool({
+  id: "list-transactions",
+  description:
+    "List exact YNAB transactions over a date range, optionally filtered by one account, category, or payee. Use this for questions about what happened in a category or account. Transfers are included by default.",
+  inputSchema: z
+    .object({
+      ...resourceInput,
+      days: z.number().int().min(1).max(365).default(30),
+      from: z.string().optional().describe("YYYY-MM-DD inclusive"),
+      through: z.string().optional().describe("YYYY-MM-DD inclusive"),
+      accountId: z.string().optional(),
+      accountName: z.string().optional(),
+      categoryId: z.string().optional(),
+      categoryName: z.string().optional(),
+      payeeName: z.string().optional(),
+      includeTransfers: z.boolean().default(true),
+      limit: z.number().int().min(1).max(50).default(20),
+    })
+    .refine((input) => !input.from || !input.through || input.from <= input.through, {
+      message: "from must be on or before through",
+      path: ["from"],
+    }),
+  mcp: {
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
+  },
+  execute: async (input, context) => {
+    const profile = await runtime(context, input.mastraResourceId);
+    if (!profile) return { ok: false, missingInputs: ["mastraResourceId"] };
+    const snapshot = await ynabGateway.getSnapshot();
+    return {
+      ok: true,
+      ...listTransactions(snapshot, {
+        timezone: profile.timezone,
+        days: input.days,
+        from: input.from,
+        through: input.through,
+        accountId: input.accountId,
+        accountName: input.accountName,
+        categoryId: input.categoryId,
+        categoryName: input.categoryName,
+        payeeName: input.payeeName,
+        includeTransfers: input.includeTransfers,
+        limit: input.limit,
       }),
     };
   },

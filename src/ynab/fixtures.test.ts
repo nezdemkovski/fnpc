@@ -6,6 +6,7 @@ import {
   evaluatePurchase,
   getBudgetOverview,
   getSpendingAnalysis,
+  listTransactions,
   listBudgetIssues,
 } from "./analysis";
 import { toYnabGatewayError, YnabGateway } from "./gateway";
@@ -71,6 +72,18 @@ const plan: PlanDetail = {
   categories: [],
   payees: [
     { id: "payee-shop", name: "Shop", transfer_account_id: null, deleted: false },
+    {
+      id: "transfer-checking",
+      name: "Transfer : Checking",
+      transfer_account_id: "account-checking",
+      deleted: false,
+    },
+    {
+      id: "transfer-brokerage",
+      name: "Transfer : Brokerage",
+      transfer_account_id: "account-brokerage",
+      deleted: false,
+    },
   ],
   months: [
     {
@@ -120,6 +133,18 @@ const plan: PlanDetail = {
           balance: -10_000,
           deleted: false,
         },
+        {
+          id: "category-savings",
+          category_group_id: "group-needs",
+          category_group_name: "Needs",
+          name: "Savings",
+          hidden: false,
+          internal: false,
+          budgeted: 100_000,
+          activity: -100_000,
+          balance: 0,
+          deleted: false,
+        },
       ],
     },
   ],
@@ -143,6 +168,31 @@ const plan: PlanDetail = {
       approved: false,
       account_id: "account-checking",
       payee_id: "payee-shop",
+      deleted: false,
+    },
+    {
+      id: "transfer-out",
+      date: "2026-07-14",
+      amount: -100_000,
+      cleared: "cleared",
+      approved: true,
+      account_id: "account-checking",
+      payee_id: "transfer-brokerage",
+      category_id: "category-savings",
+      transfer_account_id: "account-brokerage",
+      transfer_transaction_id: "transfer-in",
+      deleted: false,
+    },
+    {
+      id: "transfer-in",
+      date: "2026-07-14",
+      amount: 100_000,
+      cleared: "cleared",
+      approved: true,
+      account_id: "account-brokerage",
+      payee_id: "transfer-checking",
+      transfer_account_id: "account-checking",
+      transfer_transaction_id: "transfer-out",
       deleted: false,
     },
   ],
@@ -210,6 +260,58 @@ describe("YNAB deterministic analysis", () => {
     expect(result.byPayee[0]).toMatchObject({ name: "Shop", amount: "€55.00" });
   });
 
+  test("lists the account side of a transfer without duplicating its pair", () => {
+    const result = listTransactions(snapshot, {
+      timezone: "Europe/Prague",
+      accountName: "Brokerage",
+      days: 30,
+      now,
+    });
+
+    expect(result).toMatchObject({
+      status: "ok",
+      transactionCount: 1,
+      transactions: [
+        {
+          id: "transfer-in",
+          amount: "€100.00",
+          account: "Brokerage",
+          transfer: { account: "Checking", transactionId: "transfer-out" },
+        },
+      ],
+    });
+  });
+
+  test("lists a categorized transfer and can exclude transfers", () => {
+    const included = listTransactions(snapshot, {
+      timezone: "Europe/Prague",
+      categoryName: "Savings",
+      days: 30,
+      now,
+    });
+    const excluded = listTransactions(snapshot, {
+      timezone: "Europe/Prague",
+      categoryName: "Savings",
+      includeTransfers: false,
+      days: 30,
+      now,
+    });
+
+    expect(included).toMatchObject({
+      status: "ok",
+      transactionCount: 1,
+      transactions: [
+        {
+          id: "transfer-out",
+          amount: "-€100.00",
+          category: "Savings",
+          transfer: { account: "Brokerage", transactionId: "transfer-in" },
+        },
+      ],
+    });
+    expect(excluded).toMatchObject({ status: "ok", transactionCount: 0 });
+  });
+
   test("requires category funding rather than treating bank balance as free cash", () => {
     expect(
       evaluatePurchase(snapshot, {
@@ -238,7 +340,7 @@ describe("YNAB deterministic analysis", () => {
 });
 
 describe("YnabGateway", () => {
-  test("caches plan reads and invalidates after a mutation", async () => {
+  test("caches plan reads, supports forced refresh, and invalidates after a mutation", async () => {
     let reads = 0;
     let writes = 0;
     const client = {
@@ -269,6 +371,10 @@ describe("YnabGateway", () => {
     await gateway.getSnapshot();
     await gateway.getSnapshot();
     expect(reads).toBe(1);
+    await gateway.getSnapshot({ force: true });
+    expect(reads).toBe(2);
+    await gateway.getSnapshot();
+    expect(reads).toBe(2);
     await gateway.createTransaction({
       account_id: "account-checking",
       date: "2026-07-16",
@@ -276,7 +382,7 @@ describe("YnabGateway", () => {
     });
     expect(writes).toBe(1);
     await gateway.getSnapshot();
-    expect(reads).toBe(2);
+    expect(reads).toBe(3);
   });
 
   test("maps SDK failures without exposing response bodies or credentials", () => {

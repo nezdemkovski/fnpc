@@ -276,6 +276,9 @@ export const getSpendingAnalysis = (
 
 const normalizeName = (value: string) => value.trim().toLocaleLowerCase();
 
+const matchesName = (value: string | undefined, expected: string) =>
+  value ? normalizeName(value) === normalizeName(expected) : false;
+
 export const findNamedCategory = (snapshot: YnabSnapshot, name: string) => {
   const normalized = normalizeName(name);
   const matches = snapshot.months
@@ -287,6 +290,150 @@ export const findNamedCategory = (snapshot: YnabSnapshot, name: string) => {
         normalizeName(`${category.groupName} / ${category.name}`) === normalized,
     );
   return [...new Map(matches.map((category) => [category.id, category])).values()];
+};
+
+export const listTransactions = (
+  snapshot: YnabSnapshot,
+  {
+    timezone,
+    days = 30,
+    from,
+    through,
+    accountId,
+    accountName,
+    categoryId,
+    categoryName,
+    payeeName,
+    includeTransfers = true,
+    limit = 20,
+    now = new Date(),
+  }: {
+    timezone: string;
+    days?: number;
+    from?: string;
+    through?: string;
+    accountId?: string;
+    accountName?: string;
+    categoryId?: string;
+    categoryName?: string;
+    payeeName?: string;
+    includeTransfers?: boolean;
+    limit?: number;
+    now?: Date;
+  },
+) => {
+  const rangeThrough = through ?? currentDateKey(timezone, now);
+  const rangeFrom =
+    from ?? currentDateKey(timezone, subDays(now, Math.max(days, 1) - 1));
+  const accounts = snapshot.accounts.filter((account) => !account.closed);
+  const matchingAccounts = accountId
+    ? accounts.filter((account) => account.id === accountId)
+    : accountName
+      ? accounts.filter((account) => matchesName(account.name, accountName))
+      : [];
+  const matchingCategories = categoryId
+    ? snapshot.months
+        .flatMap((month) => month.categories)
+        .filter((category) => category.id === categoryId)
+    : categoryName
+      ? findNamedCategory(snapshot, categoryName)
+      : [];
+  const uniqueCategories = [
+    ...new Map(matchingCategories.map((category) => [category.id, category])).values(),
+  ];
+
+  if ((accountId || accountName) && matchingAccounts.length !== 1) {
+    return {
+      source: "YNAB",
+      status: "needs_account" as const,
+      matchingAccounts: matchingAccounts.map((account) => ({
+        id: account.id,
+        name: account.name,
+        type: account.type,
+      })),
+    };
+  }
+  if ((categoryId || categoryName) && uniqueCategories.length !== 1) {
+    return {
+      source: "YNAB",
+      status: "needs_category" as const,
+      matchingCategories: uniqueCategories.map((category) => ({
+        id: category.id,
+        group: category.groupName,
+        name: category.name,
+      })),
+    };
+  }
+
+  const selectedAccount = matchingAccounts[0];
+  const selectedCategory = uniqueCategories[0];
+  const accountNames = new Map(accounts.map((account) => [account.id, account.name]));
+  const transactions = snapshot.transactions
+    .filter(
+      (transaction) =>
+        transaction.date >= rangeFrom && transaction.date <= rangeThrough,
+    )
+    .filter(
+      (transaction) =>
+        !selectedAccount || transaction.accountId === selectedAccount.id,
+    )
+    .filter(
+      (transaction) =>
+        !selectedCategory || transaction.categoryId === selectedCategory.id,
+    )
+    .filter(
+      (transaction) =>
+        !payeeName || matchesName(transaction.payeeName, payeeName),
+    )
+    .filter((transaction) => includeTransfers || !transaction.transferAccountId)
+    .sort(
+      (left, right) =>
+        right.date.localeCompare(left.date) || right.id.localeCompare(left.id),
+    )
+    .slice(0, limit)
+    .map((transaction) => ({
+      id: transaction.id,
+      date: transaction.date,
+      amount: format(snapshot, transaction.amount),
+      amountMilliunits: transaction.amount,
+      direction: transaction.amount < 0 ? ("expense" as const) : ("income" as const),
+      account: transaction.accountName,
+      payee: transaction.payeeName,
+      category: transaction.categoryName,
+      categoryGroup: transaction.categoryGroupName,
+      memo: transaction.memo,
+      approved: transaction.approved,
+      cleared: transaction.cleared,
+      transfer: transaction.transferAccountId
+        ? {
+            account: accountNames.get(transaction.transferAccountId) ?? "Unknown account",
+            transactionId: transaction.transferTransactionId,
+          }
+        : undefined,
+    }));
+
+  return {
+    source: "YNAB",
+    status: "ok" as const,
+    fetchedAt: snapshot.fetchedAt,
+    range: { from: rangeFrom, through: rangeThrough },
+    filters: {
+      account: selectedAccount
+        ? { id: selectedAccount.id, name: selectedAccount.name }
+        : undefined,
+      category: selectedCategory
+        ? {
+            id: selectedCategory.id,
+            group: selectedCategory.groupName,
+            name: selectedCategory.name,
+          }
+        : undefined,
+      payeeName,
+      includeTransfers,
+    },
+    transactionCount: transactions.length,
+    transactions,
+  };
 };
 
 export const evaluatePurchase = (
