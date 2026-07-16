@@ -1,11 +1,29 @@
-export const majorToMinor = (amount: number): number => Math.round(amount * 100);
+import type { CurrencyFormat } from "ynab";
 
-export const minorToMajor = (amountMinor: number): number => amountMinor / 100;
+export type Milliunits = number & { readonly __brand: "Milliunits" };
 
-export const formatMoney = (amountMinor: number, currency: string): string => {
-  const amount = minorToMajor(amountMinor);
-  return `${new Intl.NumberFormat("en-US", {
-    maximumFractionDigits: 2,
-    minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
-  }).format(amount)} ${currency}`;
+export const asMilliunits = (value: number): Milliunits => {
+  if (!Number.isSafeInteger(value)) {
+    throw new Error(`Invalid YNAB milliunits value: ${value}`);
+  }
+  return value as Milliunits;
 };
+
+export const majorToMilliunits = (amount: number): Milliunits => {
+  if (!Number.isFinite(amount)) throw new Error("Amount must be finite");
+  return asMilliunits(Math.round(amount * 1000));
+};
+
+export const milliunitsToMajor = (amount: number): number => amount / 1000;
+
+export const formatMilliunits = (
+  amount: number,
+  currency: CurrencyFormat,
+  locale = "en-US",
+): string =>
+  new Intl.NumberFormat(locale, {
+    style: "currency",
+    currency: currency.iso_code,
+    minimumFractionDigits: currency.decimal_digits,
+    maximumFractionDigits: currency.decimal_digits,
+  }).format(milliunitsToMajor(amount));

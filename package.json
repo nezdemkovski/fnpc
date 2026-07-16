@@ -1,20 +1,14 @@
 {
   "name": "fnpc",
-  "version": "0.1.19",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "mastra dev",
     "build": "mastra build --studio && bun build scripts/migrate.ts --target bun --external pg --external drizzle-orm --outfile .mastra/output/migrate.mjs",
     "start": "mastra start",
+    "test": "bun test",
     "typecheck": "tsc --noEmit",
-    "eval:seed-datasets": "bun --env-file .env scripts/seed-eval-datasets.ts",
-    "eval:audit-datasets": "bun --env-file .env scripts/audit-eval-datasets.ts",
-    "eval:audit-workflows": "bun --env-file .env scripts/audit-eval-datasets.ts --target=workflow",
-    "eval:audit-agents": "bun --env-file .env scripts/audit-eval-datasets.ts --target=agent",
-    "eval:run-workflows": "bun --env-file .env scripts/run-eval-datasets.ts",
-    "eval:run-agents": "bun --env-file .env scripts/run-eval-datasets.ts --target=agent",
-    "eval:run-all": "bun --env-file .env scripts/run-eval-datasets.ts --target=all",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:migrate:deploy": "bun scripts/migrate.ts",
@@ -22,26 +16,27 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
-    "@chat-adapter/telegram": "^4.30.0",
+    "@chat-adapter/telegram": "^4.34.0",
     "@date-fns/tz": "^1.5.0",
-    "@mastra/clickhouse": "^1.9.1",
-    "@mastra/core": "1.41.0",
-    "@mastra/hono": "1.4.24",
-    "@mastra/memory": "1.20.2",
-    "@mastra/observability": "^1.14.1",
-    "@mastra/pg": "^1.12.1",
+    "@mastra/clickhouse": "^1.12.0",
+    "@mastra/core": "1.51.0",
+    "@mastra/hono": "1.5.7",
+    "@mastra/memory": "1.23.0",
+    "@mastra/observability": "^1.16.1",
+    "@mastra/pg": "^1.16.0",
     "date-fns": "^4.4.0",
-    "drizzle-orm": "^1.0.0-beta.22",
-    "hono": "latest",
-    "jose": "^6.1.3",
-    "pg": "^8.21.0",
-    "zod": "latest"
+    "drizzle-orm": "1.0.0-rc.4",
+    "hono": "^4.12.30",
+    "jose": "^6.2.3",
+    "pg": "^8.22.0",
+    "ynab": "4.5.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@types/bun": "latest",
-    "@types/node": "^25.9.1",
-    "drizzle-kit": "^1.0.0-beta.22",
-    "mastra": "^1.12.2",
-    "typescript": "latest"
+    "@types/bun": "^1.3.14",
+    "@types/node": "^26.1.1",
+    "drizzle-kit": "1.0.0-rc.4",
+    "mastra": "^1.19.0",
+    "typescript": "^7.0.2"
   }
 }

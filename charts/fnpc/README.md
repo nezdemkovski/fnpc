@@ -4,6 +4,7 @@ This chart deploys the FNPC Mastra service with:
 
 - External Secrets backed by the `onepassword` ClusterSecretStore.
 - Optional ClickHouse observability storage for Mastra traces and metrics.
+- YNAB as the only source of truth for financial data.
 
 ## Postgres
 
@@ -27,7 +28,10 @@ postgres:
 
 - `ANTHROPIC_API_KEY`
 - `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_WEBHOOK_SECRET_TOKEN`
 - `AUTH_SESSION_SECRET`
+- `YNAB_ACCESS_TOKEN`
+- `YNAB_PLAN_ID`
 
 `fnpc-clickhouse`
 

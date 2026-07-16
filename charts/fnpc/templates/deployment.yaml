@@ -65,6 +65,8 @@ spec:
               value: {{ .Values.env.telegramAdapterMode | quote }}
             - name: AI_MODEL
               value: {{ .Values.env.aiModel | quote }}
+            - name: YNAB_CACHE_TTL_MS
+              value: {{ .Values.env.ynabCacheTtlMs | quote }}
             {{- with .Values.env.auth }}
             - name: AUTH_URL
               value: {{ .url | quote }}
@@ -107,6 +109,16 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.secret.name }}
                   key: TELEGRAM_WEBHOOK_SECRET_TOKEN
+            - name: YNAB_ACCESS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secret.name }}
+                  key: YNAB_ACCESS_TOKEN
+            - name: YNAB_PLAN_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secret.name }}
+                  key: YNAB_PLAN_ID
             {{- if .Values.clickhouse.enabled }}
             - name: CLICKHOUSE_URL
               value: {{ .Values.clickhouse.url | quote }}

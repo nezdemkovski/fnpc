@@ -33,8 +33,15 @@ const optionalClickhouseConfig = () => {
 const studioAuthEnabled = Boolean(process.env.AUTH_URL ?? process.env.AUTH_BASE_URL);
 
 export const env = {
-  postgresConnection: postgresConnection(),
+  get postgresConnection() {
+    return postgresConnection();
+  },
   model: normalizeMastraModel(process.env.AI_MODEL ?? "claude-sonnet-4-5"),
+  ynab: {
+    accessToken: process.env.YNAB_ACCESS_TOKEN,
+    planId: process.env.YNAB_PLAN_ID,
+    cacheTtlMs: Number(process.env.YNAB_CACHE_TTL_MS ?? "45000"),
+  },
   telegramAdapterMode: telegramAdapterMode(process.env.TELEGRAM_ADAPTER_MODE),
   clickhouse: optionalClickhouseConfig(),
   studioAuthEnabled,
