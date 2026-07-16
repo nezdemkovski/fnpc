@@ -50,6 +50,12 @@ Endpoint selection:
 - Transactions: listTransactionsTool for plan-wide date/review filters; use listAccountTransactionsTool, listCategoryTransactionsTool, listMonthTransactionsTool, or listPayeeTransactionsTool when the question names that scope; getTransactionTool for one ID.
 - Resolve names to IDs with the relevant list tool first. Do not guess IDs and do not hide entity resolution inside another tool.
 
+Execution efficiency:
+- Use the smallest endpoint set that can answer the question. Never repeat an endpoint call in the same turn unless it failed or the user explicitly asks for a second refresh.
+- Call independent read tools together in the same model step so they execute in parallel.
+- For a current financial overview, call getMonthTool for the current month, listAccountsTool, and listScheduledTransactionsTool together. Add another endpoint only when the question requires it.
+- Do not announce tool calls, narrate progress, or expose tool names, raw payloads, IDs, server knowledge, or provider metadata. Return one concise user-facing answer after the required data is available.
+
 YNAB semantics:
 - Accounts describe where money is. Categories describe what money is for.
 - Ready to Assign is unassigned money, not automatically free cash.
@@ -98,7 +104,7 @@ export const financialAgent = new Agent({
   instructions,
   model: env.model,
   defaultOptions: {
-    maxSteps: 12,
+    maxSteps: 6,
   },
   inputProcessors: [new RuntimeProfileProcessor()],
   tools: {
@@ -129,7 +135,13 @@ export const financialAgent = new Agent({
       ? undefined
       : {
           adapters: {
-            telegram: createTelegramAdapter({ mode: env.telegramAdapterMode }),
+            telegram: {
+              adapter: createTelegramAdapter({ mode: env.telegramAdapterMode }),
+              streaming: { updateIntervalMs: 500 },
+              toolDisplay: "hidden",
+              formatError: () =>
+                "Не удалось обработать запрос. Попробуй ещё раз.",
+            },
           },
         },
   memory: new Memory({
@@ -143,18 +155,23 @@ export const financialAgent = new Agent({
       },
       observationalMemory: {
         model: env.model,
-        scope: "resource",
+        scope: "thread",
         temporalMarkers: true,
         observation: {
           messageTokens: 12_000,
+          bufferTokens: 0.2,
+          bufferOnIdle: true,
+          bufferActivation: 0.8,
+          blockAfter: 1.8,
           manageWorkingMemory: true,
           instruction:
-            "Preserve the user's preferences, decision criteria, goals, explanations, and unresolved follow-ups. Never preserve YNAB financial values or entity IDs as durable facts; YNAB endpoint tools must refresh them.",
+            "Preserve the user's preferences, decision criteria, goals, explanations, and unresolved follow-ups. Never preserve YNAB financial values, entity IDs, tool names, tool outputs, or implementation details; YNAB endpoint tools must refresh current facts.",
         },
         reflection: {
           observationTokens: 36_000,
+          bufferActivation: 0.5,
           instruction:
-            "Consolidate durable personal preferences and goals. Remove financial facts that can become stale and keep YNAB as the sole financial source of truth.",
+            "Consolidate durable personal preferences and goals. Remove financial facts, tool names, tool outputs, and implementation details, and keep YNAB as the sole financial source of truth.",
         },
       },
     },

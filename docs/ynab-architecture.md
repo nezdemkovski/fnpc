@@ -77,7 +77,8 @@ This makes every number traceable to a provider response from the current turn.
 
 ## Memory Boundary
 
-FNPC uses resource-scoped Mastra working memory and observational memory for:
+FNPC uses resource-scoped Mastra working memory and thread-scoped observational
+memory for:
 
 - communication preferences;
 - decision criteria and risk tolerance;
@@ -88,6 +89,10 @@ FNPC uses resource-scoped Mastra working memory and observational memory for:
 Memory must not persist YNAB balances, category amounts, transactions, targets,
 schedules, or provider entity IDs as authoritative facts. These values can
 change independently and must be refreshed with endpoint tools.
+
+Observational memory runs with asynchronous buffering so memory maintenance
+does not block the user-facing response, and it must not retain tool names or
+implementation details.
 
 The local profile remains the explicit source for preferred name, language, and
 timezone. It is injected into runtime context without making a YNAB request.
