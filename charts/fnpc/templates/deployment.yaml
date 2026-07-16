@@ -61,6 +61,8 @@ spec:
               value: {{ .Values.env.mastraAutoDetectUrl | quote }}
             - name: MASTRA_HIDE_CLOUD_CTA
               value: {{ .Values.env.mastraHideCloudCta | quote }}
+            - name: MASTRA_TELEMETRY_DISABLED
+              value: {{ .Values.env.mastraTelemetryDisabled | quote }}
             - name: TELEGRAM_ADAPTER_MODE
               value: {{ .Values.env.telegramAdapterMode | quote }}
             - name: AI_MODEL

@@ -2,13 +2,14 @@ replicaCount: 1
 
 image:
   repository: ghcr.io/nezdemkovski/fnpc
-  tag: "0.3.0"
+  tag: "0.3.1"
   pullPolicy: IfNotPresent
 
 env:
   port: "4111"
   mastraAutoDetectUrl: "true"
   mastraHideCloudCta: "true"
+  mastraTelemetryDisabled: "1"
   telegramAdapterMode: webhook
   aiModel: claude-opus-4-7
   ynabPlanId: last-used
