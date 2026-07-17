@@ -76,6 +76,13 @@ spec:
                   name: {{ $.Values.secret.name }}
                   key: MASTRA_JWT_SECRET
             {{- end }}
+            {{- if .Values.env.studioAuth.enabled }}
+            - name: MASTRA_STUDIO_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Values.secret.name }}
+                  key: MASTRA_STUDIO_TOKEN
+            {{- end }}
             - name: POSTGRES_USERNAME
               valueFrom:
                 secretKeyRef:

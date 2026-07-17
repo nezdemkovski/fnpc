@@ -1,5 +1,6 @@
 import { MastraJwtAuth } from "@mastra/auth";
 import { Mastra } from "@mastra/core";
+import { SimpleAuth } from "@mastra/core/server";
 import { MastraCompositeStore } from "@mastra/core/storage";
 import { ObservabilityStorageClickhouseVNext } from "@mastra/clickhouse";
 import {
@@ -37,6 +38,17 @@ const storage = env.clickhouse
     })
   : postgresStorage;
 
+const studioAuth = env.mastraStudioToken
+  ? new SimpleAuth({
+      tokens: {
+        [env.mastraStudioToken]: {
+          id: "studio",
+          name: "Mastra Studio",
+        },
+      },
+    })
+  : undefined;
+
 export const mastra = new Mastra({
   agents: { financialAgent },
   storage,
@@ -56,4 +68,5 @@ export const mastra = new Mastra({
         }),
       }
     : undefined,
+  studio: studioAuth ? { auth: studioAuth } : undefined,
 });

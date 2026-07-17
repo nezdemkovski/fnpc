@@ -57,4 +57,5 @@ export const env = {
   telegramAdapterMode: telegramAdapterMode(process.env.TELEGRAM_ADAPTER_MODE),
   clickhouse: optionalClickhouseConfig(),
   mastraJwtSecret: process.env.MASTRA_JWT_SECRET,
+  mastraStudioToken: process.env.MASTRA_STUDIO_TOKEN,
 };

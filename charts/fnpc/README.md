@@ -30,10 +30,11 @@ postgres:
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_WEBHOOK_SECRET_TOKEN`
 - `MASTRA_JWT_SECRET`
+- `MASTRA_JWT_TOKEN`
 
-`MASTRA_JWT_TOKEN` is stored in the same item for Studio clients. It is not
-synced into the workload; add it to Studio as an `Authorization: Bearer ...`
-header.
+The API validates bearer tokens with `MASTRA_JWT_SECRET`. Studio uses the
+preconfigured `MASTRA_JWT_TOKEN` as a token login and stores the authenticated
+session in an HTTP-only cookie.
 
 `Ynab`
 
