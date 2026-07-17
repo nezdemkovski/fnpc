@@ -29,7 +29,11 @@ postgres:
 - `ANTHROPIC_API_KEY`
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_WEBHOOK_SECRET_TOKEN`
-- `AUTH_SESSION_SECRET`
+- `MASTRA_JWT_SECRET`
+
+`MASTRA_JWT_TOKEN` is stored in the same item for Studio clients. It is not
+synced into the workload; add it to Studio as an `Authorization: Bearer ...`
+header.
 
 `Ynab`
 

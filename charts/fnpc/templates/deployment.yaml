@@ -69,16 +69,12 @@ spec:
               value: {{ .Values.env.aiModel | quote }}
             - name: YNAB_PLAN_ID
               value: {{ .Values.env.ynabPlanId | quote }}
-            {{- with .Values.env.auth }}
-            - name: AUTH_URL
-              value: {{ .url | quote }}
-            - name: AUTH_REALM
-              value: {{ .realm | quote }}
-            - name: AUTH_SESSION_SECRET
+            {{- if .Values.env.jwtAuth.enabled }}
+            - name: MASTRA_JWT_SECRET
               valueFrom:
                 secretKeyRef:
                   name: {{ $.Values.secret.name }}
-                  key: AUTH_SESSION_SECRET
+                  key: MASTRA_JWT_SECRET
             {{- end }}
             - name: POSTGRES_USERNAME
               valueFrom:

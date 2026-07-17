@@ -1,3 +1,4 @@
+import { MastraJwtAuth } from "@mastra/auth";
 import { Mastra } from "@mastra/core";
 import { MastraCompositeStore } from "@mastra/core/storage";
 import { ObservabilityStorageClickhouseVNext } from "@mastra/clickhouse";
@@ -9,7 +10,6 @@ import {
 import { PostgresStore } from "@mastra/pg";
 import { env } from "../config/env";
 import { financialAgent } from "./agents/financial-agent";
-import { MastraAuthRealm } from "./auth/shared-auth-provider";
 
 const postgresStorage = new PostgresStore({
   id: "fnpc-mastra-storage",
@@ -49,12 +49,10 @@ export const mastra = new Mastra({
       },
     },
   }),
-  server: env.auth
+  server: env.mastraJwtSecret
     ? {
-        auth: new MastraAuthRealm({
-          authUrl: env.auth.url,
-          realm: env.auth.realm,
-          sessionSecret: env.auth.sessionSecret,
+        auth: new MastraJwtAuth({
+          secret: env.mastraJwtSecret,
         }),
       }
     : undefined,

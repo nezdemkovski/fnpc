@@ -1,6 +1,6 @@
 {
   "name": "fnpc",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "private": true,
   "type": "module",
   "scripts": {
@@ -18,6 +18,7 @@
   "dependencies": {
     "@chat-adapter/telegram": "^4.34.0",
     "@date-fns/tz": "^1.5.0",
+    "@mastra/auth": "1.1.2",
     "@mastra/clickhouse": "^1.12.0",
     "@mastra/core": "1.51.0",
     "@mastra/memory": "1.23.0",
@@ -25,7 +26,6 @@
     "@mastra/pg": "^1.16.0",
     "date-fns": "^4.4.0",
     "drizzle-orm": "1.0.0-rc.4",
-    "jose": "^6.2.3",
     "pg": "^8.22.0",
     "ynab": "4.5.0",
     "zod": "^4.4.3"
