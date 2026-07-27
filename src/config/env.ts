@@ -50,6 +50,9 @@ export const env = {
     accessToken: process.env.YNAB_ACCESS_TOKEN,
     planId: process.env.YNAB_PLAN_ID ?? "last-used",
   },
+  braveSearch: {
+    apiKey: process.env.BRAVE_SEARCH_API_KEY,
+  },
   telegramAdapterMode: telegramAdapterMode(process.env.TELEGRAM_ADAPTER_MODE),
   clickhouse: optionalClickhouseConfig(),
   mastraJwtSecret: process.env.MASTRA_JWT_SECRET,

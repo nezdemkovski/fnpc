@@ -28,6 +28,7 @@ postgres:
 
 - `ANTHROPIC_API_KEY`
 - `XAI_API_KEY`
+- `BRAVE_SEARCH_API_KEY`
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_WEBHOOK_SECRET_TOKEN`
 - `MASTRA_JWT_SECRET`
@@ -39,8 +40,8 @@ session in an HTTP-only cookie.
 
 Model identifiers use Mastra's `provider/model` format. The default is
 `xai/grok-4.5`; set `env.aiModel` to another registered model to override it.
-Provider API key names are configured through
-`onepassword.modelProviderProperties` and injected from the `fnpc` item.
+Application API key names are configured through
+`onepassword.appProperties` and injected from the `fnpc` item.
 
 `Ynab`
 

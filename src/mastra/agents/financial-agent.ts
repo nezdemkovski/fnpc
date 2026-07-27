@@ -4,6 +4,7 @@ import { Memory } from "@mastra/memory";
 import { env } from "../../config/env";
 import { RuntimeProfileProcessor } from "../processors/runtime-profile-processor";
 import { updateProfileTool } from "../tools/profile-tool";
+import { webSearchTool } from "../tools/web-search-tool";
 import {
   getAccountTool,
   getCategoryTool,
@@ -49,6 +50,8 @@ Endpoint selection:
 - Scheduled transactions: listScheduledTransactionsTool or getScheduledTransactionTool.
 - Transactions: listTransactionsTool for plan-wide date/review filters; use listAccountTransactionsTool, listCategoryTransactionsTool, listMonthTransactionsTool, or listPayeeTransactionsTool when the question names that scope; getTransactionTool for one ID.
 - Resolve names to IDs with the relevant list tool first. Do not guess IDs and do not hide entity resolution inside another tool.
+- External context: use webSearchTool only for current public information that YNAB cannot provide, such as prices, products, news, regulations, or market context. Include source URLs in the answer.
+- Web search can contextualize a financial decision but can never replace YNAB as the source for balances, budget amounts, transactions, targets, or schedules.
 
 Execution efficiency:
 - Use the smallest endpoint set that can answer the question. Never repeat an endpoint call in the same turn unless it failed or the user explicitly asks for a second refresh.
@@ -129,6 +132,7 @@ export const financialAgent = new Agent({
     prepareTransactionTool,
     commitTransactionTool,
     updateProfileTool,
+    webSearchTool,
   },
   channels:
     env.telegramAdapterMode === "off"

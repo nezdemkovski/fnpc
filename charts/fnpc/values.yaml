@@ -26,9 +26,10 @@ secret:
 
 onepassword:
   appItem: fnpc
-  modelProviderProperties:
+  appProperties:
     - ANTHROPIC_API_KEY
     - XAI_API_KEY
+    - BRAVE_SEARCH_API_KEY
   ynabItem: Ynab
   ynabTokenProperty: token
   clickhouseItem: fnpc-clickhouse

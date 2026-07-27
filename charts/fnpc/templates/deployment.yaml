@@ -99,7 +99,7 @@ spec:
               value: {{ .Values.postgres.port | quote }}
             - name: POSTGRES_DATABASE
               value: {{ .Values.postgres.database | quote }}
-            {{- range .Values.onepassword.modelProviderProperties }}
+            {{- range .Values.onepassword.appProperties }}
             - name: {{ . | quote }}
               valueFrom:
                 secretKeyRef:
