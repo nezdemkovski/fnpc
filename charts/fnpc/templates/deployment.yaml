@@ -99,11 +99,13 @@ spec:
               value: {{ .Values.postgres.port | quote }}
             - name: POSTGRES_DATABASE
               value: {{ .Values.postgres.database | quote }}
-            - name: ANTHROPIC_API_KEY
+            {{- range .Values.onepassword.modelProviderProperties }}
+            - name: {{ . | quote }}
               valueFrom:
                 secretKeyRef:
-                  name: {{ .Values.secret.name }}
-                  key: ANTHROPIC_API_KEY
+                  name: {{ $.Values.secret.name }}
+                  key: {{ . | quote }}
+            {{- end }}
             - name: TELEGRAM_BOT_TOKEN
               valueFrom:
                 secretKeyRef:

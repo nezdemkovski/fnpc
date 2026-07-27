@@ -2,7 +2,7 @@ replicaCount: 1
 
 image:
   repository: ghcr.io/nezdemkovski/fnpc
-  tag: "0.3.3"
+  tag: "0.3.5"
   pullPolicy: IfNotPresent
 
 env:
@@ -11,7 +11,7 @@ env:
   mastraHideCloudCta: "true"
   mastraTelemetryDisabled: "1"
   telegramAdapterMode: webhook
-  aiModel: claude-opus-4-7
+  aiModel: xai/grok-4.5
   ynabPlanId: last-used
   jwtAuth:
     enabled: true
@@ -26,6 +26,9 @@ secret:
 
 onepassword:
   appItem: fnpc
+  modelProviderProperties:
+    - ANTHROPIC_API_KEY
+    - XAI_API_KEY
   ynabItem: Ynab
   ynabTokenProperty: token
   clickhouseItem: fnpc-clickhouse

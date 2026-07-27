@@ -1,14 +1,10 @@
 import { postgresConnection } from "../db/connection";
+import { normalizeMastraModel } from "./model";
 
 const requiredEnv = (name: string): string => {
   const value = process.env[name];
   if (!value) throw new Error(`${name} is required`);
   return value;
-};
-
-const normalizeMastraModel = (model: string): string => {
-  if (model.includes("/")) return model;
-  return `anthropic/${model}`;
 };
 
 const telegramAdapterMode = (
@@ -49,7 +45,7 @@ export const env = {
   get postgresConnection() {
     return postgresConnection();
   },
-  model: normalizeMastraModel(process.env.AI_MODEL ?? "claude-opus-4-7"),
+  model: normalizeMastraModel(process.env.AI_MODEL ?? "xai/grok-4.5"),
   ynab: {
     accessToken: process.env.YNAB_ACCESS_TOKEN,
     planId: process.env.YNAB_PLAN_ID ?? "last-used",

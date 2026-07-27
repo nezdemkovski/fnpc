@@ -1,6 +1,6 @@
 {
   "name": "fnpc",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "private": true,
   "type": "module",
   "scripts": {
@@ -16,14 +16,14 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
-    "@chat-adapter/telegram": "^4.34.0",
+    "@chat-adapter/telegram": "4.35.0",
     "@date-fns/tz": "^1.5.0",
     "@mastra/auth": "1.1.2",
     "@mastra/clickhouse": "^1.12.0",
-    "@mastra/core": "1.51.0",
-    "@mastra/memory": "1.23.0",
-    "@mastra/observability": "^1.16.1",
-    "@mastra/pg": "^1.16.0",
+    "@mastra/core": "1.53.0",
+    "@mastra/memory": "1.23.1",
+    "@mastra/observability": "1.16.2",
+    "@mastra/pg": "1.17.1",
     "date-fns": "^4.4.0",
     "drizzle-orm": "1.0.0-rc.4",
     "pg": "^8.22.0",
@@ -32,9 +32,9 @@
   },
   "devDependencies": {
     "@types/bun": "^1.3.14",
-    "@types/node": "^26.1.1",
+    "@types/node": "26.1.2",
     "drizzle-kit": "1.0.0-rc.4",
-    "mastra": "^1.19.0",
+    "mastra": "1.20.2",
     "typescript": "^7.0.2"
   }
 }
