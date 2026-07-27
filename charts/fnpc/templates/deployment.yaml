@@ -69,6 +69,8 @@ spec:
               value: {{ .Values.env.aiModel | quote }}
             - name: YNAB_PLAN_ID
               value: {{ .Values.env.ynabPlanId | quote }}
+            - name: TRADING212_ENV
+              value: {{ .Values.env.trading212Environment | quote }}
             {{- if .Values.env.jwtAuth.enabled }}
             - name: MASTRA_JWT_SECRET
               valueFrom:

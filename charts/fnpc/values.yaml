@@ -2,7 +2,7 @@ replicaCount: 1
 
 image:
   repository: ghcr.io/nezdemkovski/fnpc
-  tag: "0.3.5"
+  tag: "0.3.6"
   pullPolicy: IfNotPresent
 
 env:
@@ -13,6 +13,7 @@ env:
   telegramAdapterMode: webhook
   aiModel: xai/grok-4.5
   ynabPlanId: last-used
+  trading212Environment: live
   jwtAuth:
     enabled: true
   studioAuth:
@@ -30,6 +31,8 @@ onepassword:
     - ANTHROPIC_API_KEY
     - XAI_API_KEY
     - BRAVE_SEARCH_API_KEY
+    - TRADING212_API_KEY_ID
+    - TRADING212_SECRET_KEY
   ynabItem: Ynab
   ynabTokenProperty: token
   clickhouseItem: fnpc-clickhouse

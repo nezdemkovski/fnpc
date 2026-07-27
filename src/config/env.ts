@@ -41,6 +41,14 @@ const optionalClickhouseConfig = () => {
   };
 };
 
+const trading212Environment = (
+  value: string | undefined,
+): "live" | "demo" => {
+  if (value === undefined || value === "live") return "live";
+  if (value === "demo") return "demo";
+  throw new Error("TRADING212_ENV must be live or demo");
+};
+
 export const env = {
   get postgresConnection() {
     return postgresConnection();
@@ -52,6 +60,11 @@ export const env = {
   },
   braveSearch: {
     apiKey: process.env.BRAVE_SEARCH_API_KEY,
+  },
+  trading212: {
+    apiKeyId: process.env.TRADING212_API_KEY_ID,
+    secretKey: process.env.TRADING212_SECRET_KEY,
+    environment: trading212Environment(process.env.TRADING212_ENV),
   },
   telegramAdapterMode: telegramAdapterMode(process.env.TELEGRAM_ADAPTER_MODE),
   clickhouse: optionalClickhouseConfig(),

@@ -6,6 +6,18 @@ import { RuntimeProfileProcessor } from "../processors/runtime-profile-processor
 import { updateProfileTool } from "../tools/profile-tool";
 import { webSearchTool } from "../tools/web-search-tool";
 import {
+  getTrading212PendingOrderTool,
+  getTrading212PortfolioReportTool,
+  listTrading212DividendsTool,
+  listTrading212ExchangesTool,
+  listTrading212HistoricalOrdersTool,
+  listTrading212PendingOrdersTool,
+  listTrading212ReportsTool,
+  listTrading212TransactionsTool,
+  requestTrading212ReportTool,
+  searchTrading212InstrumentsTool,
+} from "../tools/trading212";
+import {
   getAccountTool,
   getCategoryTool,
   getMonthCategoryTool,
@@ -31,14 +43,15 @@ import {
 } from "../tools/ynab-transaction-tools";
 
 const instructions = `
-You are FNPC, a personal finance assistant backed by the user's real YNAB plan.
+You are FNPC, a personal finance assistant backed by the user's real YNAB plan and Trading212 investment account.
 
 Architecture and source-of-truth rules:
-- YNAB is the only source of truth for financial facts.
-- Conversation history, observational memory, working memory, and the local profile may contain preferences and goals, but never authoritative balances, category amounts, transactions, targets, or schedules.
-- No YNAB snapshot is preloaded. Before stating any current or historical financial fact, call the narrow YNAB endpoint tool that supplies it in this turn.
-- Each YNAB tool maps to one provider endpoint. Compose several tools when a question crosses resources. Do arithmetic only from returned endpoint data and show the important inputs.
-- If an endpoint fails, say that the required YNAB data is unavailable. Never substitute a remembered number.
+- YNAB is the source of truth for budgeting, cash planning, categories, scheduled payments, and everyday transactions.
+- Trading212 is the source of truth for investments, positions, investment orders, dividends, investment cash movements, and investment reports.
+- Conversation history, observational memory, working memory, and the local profile may contain preferences and goals, but never authoritative financial values, provider entity IDs, holdings, orders, dividends, or transactions.
+- No provider snapshot is preloaded. Before stating any current or historical financial fact, call the narrow endpoint tool that supplies it in this turn.
+- Narrow endpoint tools map one-to-one to provider endpoints. A named domain report may combine documented provider reads and deterministic calculations; treat its derived fields as canonical instead of reimplementing them in the model.
+- If an endpoint fails, say which provider data is unavailable. Never substitute a remembered number.
 - If a transaction result is truncated, narrow the date range or use a scoped endpoint instead of extrapolating.
 
 Endpoint selection:
@@ -50,13 +63,20 @@ Endpoint selection:
 - Scheduled transactions: listScheduledTransactionsTool or getScheduledTransactionTool.
 - Transactions: listTransactionsTool for plan-wide date/review filters; use listAccountTransactionsTool, listCategoryTransactionsTool, listMonthTransactionsTool, or listPayeeTransactionsTool when the question names that scope; getTransactionTool for one ID.
 - Resolve names to IDs with the relevant list tool first. Do not guess IDs and do not hide entity resolution inside another tool.
-- External context: use webSearchTool only for current public information that YNAB cannot provide, such as prices, products, news, regulations, or market context. Include source URLs in the answer.
-- Web search can contextualize a financial decision but can never replace YNAB as the source for balances, budget amounts, transactions, targets, or schedules.
+- Trading212 portfolio: getTrading212PortfolioReportTool is the canonical source for current account totals, holdings, allocation, cost basis, profit and loss, FX impact, return estimates, and reconciliation. It returns the same schema-versioned AI-ready report as folio212 portfolio --json. Use it instead of reconstructing portfolio calculations yourself.
+- Trading212 active orders: listTrading212PendingOrdersTool or getTrading212PendingOrderTool.
+- Trading212 history: listTrading212HistoricalOrdersTool for executed and canceled orders, listTrading212DividendsTool for payouts, and listTrading212TransactionsTool for deposits, withdrawals, fees, and transfers. Follow nextPagePath by passing its cursor when more history is required.
+- Trading212 reports: listTrading212ReportsTool. Only call requestTrading212ReportTool when the user explicitly asks to generate or export a statement.
+- Trading212 metadata: searchTrading212InstrumentsTool to resolve an instrument and listTrading212ExchangesTool for trading schedules.
+- External context: use webSearchTool only for current public information that YNAB and Trading212 cannot provide, such as news, regulations, product comparisons, or market context. Include source URLs in the answer.
+- Web search can contextualize a financial decision but can never replace either financial provider as the source for private account facts.
 
 Execution efficiency:
 - Use the smallest endpoint set that can answer the question. Never repeat an endpoint call in the same turn unless it failed or the user explicitly asks for a second refresh.
 - Call independent read tools together in the same model step so they execute in parallel.
 - For a current financial overview, call getMonthTool for the current month, listAccountsTool, and listScheduledTransactionsTool together. Add another endpoint only when the question requires it.
+- For a current investment overview, call getTrading212PortfolioReportTool. Add active orders or history only when relevant.
+- For a whole-finances overview, call the necessary YNAB and Trading212 reads together. Keep provider currencies explicit and never sum different currencies without a current exchange rate.
 - Do not announce tool calls, narrate progress, or expose tool names, raw payloads, IDs, server knowledge, or provider metadata. Return one concise user-facing answer after the required data is available.
 
 YNAB semantics:
@@ -98,7 +118,9 @@ const durableMemoryTemplate = `# Durable user context
 - Open follow-ups:
 
 Never store current or historical YNAB balances, category amounts, transactions, targets,
-schedules, account IDs, category IDs, or payee IDs here. Those facts must be read from YNAB.
+schedules, account IDs, category IDs, or payee IDs here. Never store Trading212 balances,
+holdings, position values, orders, dividends, transactions, reports, tickers, or provider IDs.
+Those facts must be read from their provider.
 `;
 
 export const financialAgent = new Agent({
@@ -133,6 +155,16 @@ export const financialAgent = new Agent({
     commitTransactionTool,
     updateProfileTool,
     webSearchTool,
+    getTrading212PortfolioReportTool,
+    listTrading212PendingOrdersTool,
+    getTrading212PendingOrderTool,
+    listTrading212HistoricalOrdersTool,
+    listTrading212DividendsTool,
+    listTrading212TransactionsTool,
+    listTrading212ReportsTool,
+    requestTrading212ReportTool,
+    searchTrading212InstrumentsTool,
+    listTrading212ExchangesTool,
   },
   channels:
     env.telegramAdapterMode === "off"
@@ -169,13 +201,13 @@ export const financialAgent = new Agent({
           blockAfter: 1.8,
           manageWorkingMemory: true,
           instruction:
-            "Preserve the user's preferences, decision criteria, goals, explanations, and unresolved follow-ups. Never preserve YNAB financial values, entity IDs, tool names, tool outputs, or implementation details; YNAB endpoint tools must refresh current facts.",
+            "Preserve the user's preferences, decision criteria, goals, explanations, and unresolved follow-ups. Never preserve YNAB or Trading212 financial values, entity IDs, holdings, orders, dividends, transactions, reports, tool names, tool outputs, or implementation details; provider endpoint tools must refresh current facts.",
         },
         reflection: {
           observationTokens: 36_000,
           bufferActivation: 0.5,
           instruction:
-            "Consolidate durable personal preferences and goals. Remove financial facts, tool names, tool outputs, and implementation details, and keep YNAB as the sole financial source of truth.",
+            "Consolidate durable personal preferences and goals. Remove financial facts, provider entity IDs, tool names, tool outputs, and implementation details. Keep YNAB authoritative for budgeting and Trading212 authoritative for investments.",
         },
       },
     },
