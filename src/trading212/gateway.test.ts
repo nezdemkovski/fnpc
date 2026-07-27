@@ -181,4 +181,39 @@ describe("Trading212Gateway endpoint mapping", () => {
     });
     expect(error.message).not.toContain("secret-key");
   });
+
+  test("accepts the nullable FX impact returned by live positions", async () => {
+    const gateway = new Trading212Gateway({
+      apiKeyId: "key-id",
+      secretKey: "secret-key",
+      fetch: async () =>
+        Response.json([
+          {
+            averagePricePaid: 100,
+            createdAt: "2026-07-01T10:00:00Z",
+            currentPrice: 110,
+            instrument: {
+              currency: "EUR",
+              isin: "IE0000000001",
+              name: "Example ETF",
+              ticker: "EXAMPLE_EQ",
+            },
+            quantity: 1,
+            quantityAvailableForTrading: 1,
+            quantityInPies: 0,
+            walletImpact: {
+              currency: "EUR",
+              currentValue: 110,
+              fxImpact: null,
+              totalCost: 100,
+              unrealizedProfitLoss: 10,
+            },
+          },
+        ]),
+    });
+
+    const positions = await gateway.getPositions();
+
+    expect(positions[0]?.walletImpact.fxImpact).toBeUndefined();
+  });
 });

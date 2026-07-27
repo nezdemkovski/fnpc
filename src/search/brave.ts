@@ -42,6 +42,16 @@ export type BraveWebSearchResponse = z.infer<
   typeof braveWebSearchResponseSchema
 >;
 
+const braveErrorResponseSchema = z
+  .object({
+    error: z
+      .object({
+        code: z.string(),
+      })
+      .passthrough(),
+  })
+  .passthrough();
+
 type BraveSearchErrorCode =
   | "authentication_failed"
   | "rate_limited"
@@ -59,17 +69,27 @@ export class BraveSearchError extends Error {
   }
 }
 
-const responseError = (status: number) =>
-  new BraveSearchError(
-    status === 401 || status === 403
+const responseError = async (response: Response) => {
+  const providerError = braveErrorResponseSchema.safeParse(
+    await response.json().catch(() => undefined),
+  );
+  const invalidSubscriptionToken =
+    providerError.success &&
+    providerError.data.error.code === "SUBSCRIPTION_TOKEN_INVALID";
+
+  return new BraveSearchError(
+    response.status === 401 ||
+      response.status === 403 ||
+      invalidSubscriptionToken
       ? "authentication_failed"
-      : status === 429
+      : response.status === 429
         ? "rate_limited"
-        : status >= 500
+        : response.status >= 500
           ? "search_unavailable"
           : "invalid_request",
-    status,
+    response.status,
   );
+};
 
 export class BraveSearchClient {
   constructor(
@@ -100,7 +120,7 @@ export class BraveSearchClient {
       throw new BraveSearchError("search_unavailable");
     }
 
-    if (!response.ok) throw responseError(response.status);
+    if (!response.ok) throw await responseError(response);
 
     const result = braveWebSearchResponseSchema.safeParse(await response.json());
     if (!result.success) {

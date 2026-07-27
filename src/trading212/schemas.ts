@@ -89,7 +89,10 @@ export const positionsSchema = z.array(
         .object({
           currency: z.string(),
           currentValue: z.number(),
-          fxImpact: z.number().optional(),
+          fxImpact: z
+            .number()
+            .nullish()
+            .transform((value) => value ?? undefined),
           totalCost: z.number(),
           unrealizedProfitLoss: z.number(),
         })

@@ -71,6 +71,33 @@ describe("BraveSearchClient", () => {
     expect(error.message).not.toContain("secret-key");
   });
 
+  test("recognizes Brave's 422 invalid subscription token response", async () => {
+    const client = new BraveSearchClient({
+      apiKey: "secret-key",
+      fetch: async () =>
+        Response.json(
+          {
+            error: {
+              code: "SUBSCRIPTION_TOKEN_INVALID",
+              detail: "secret-key is invalid",
+              status: 422,
+            },
+            type: "ErrorResponse",
+          },
+          { status: 422 },
+        ),
+    });
+
+    const error = await client.search("query").catch((caught) => caught);
+
+    expect(error).toMatchObject({
+      code: "authentication_failed",
+      status: 422,
+      message: "Brave Search request failed: authentication_failed",
+    });
+    expect(error.message).not.toContain("secret-key");
+  });
+
   test("rejects malformed successful responses", async () => {
     const client = new BraveSearchClient({
       apiKey: "test-key",
