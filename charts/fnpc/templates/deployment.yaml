@@ -67,6 +67,8 @@ spec:
               value: {{ .Values.env.telegramAdapterMode | quote }}
             - name: AI_MODEL
               value: {{ .Values.env.aiModel | quote }}
+            - name: XAI_REASONING_EFFORT
+              value: {{ .Values.env.xaiReasoningEffort | quote }}
             - name: YNAB_PLAN_ID
               value: {{ .Values.env.ynabPlanId | quote }}
             - name: TRADING212_ENV

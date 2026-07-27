@@ -1,5 +1,9 @@
 import { postgresConnection } from "../db/connection";
-import { normalizeMastraModel } from "./model";
+import {
+  modelProviderOptions,
+  normalizeMastraModel,
+  normalizeXaiReasoningEffort,
+} from "./model";
 
 const requiredEnv = (name: string): string => {
   const value = process.env[name];
@@ -49,11 +53,17 @@ const trading212Environment = (
   throw new Error("TRADING212_ENV must be live or demo");
 };
 
+const model = normalizeMastraModel(process.env.AI_MODEL ?? "xai/grok-4.3");
+const xaiReasoningEffort = normalizeXaiReasoningEffort(
+  process.env.XAI_REASONING_EFFORT ?? "medium",
+);
+
 export const env = {
   get postgresConnection() {
     return postgresConnection();
   },
-  model: normalizeMastraModel(process.env.AI_MODEL ?? "xai/grok-4.5"),
+  model,
+  modelProviderOptions: modelProviderOptions(model, xaiReasoningEffort),
   ynab: {
     accessToken: process.env.YNAB_ACCESS_TOKEN,
     planId: process.env.YNAB_PLAN_ID ?? "last-used",

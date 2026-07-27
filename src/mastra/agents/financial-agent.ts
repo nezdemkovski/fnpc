@@ -130,6 +130,7 @@ export const financialAgent = new Agent({
   model: env.model,
   defaultOptions: {
     maxSteps: 6,
+    providerOptions: env.modelProviderOptions,
   },
   inputProcessors: [new RuntimeProfileProcessor()],
   tools: {
@@ -195,6 +196,7 @@ export const financialAgent = new Agent({
         temporalMarkers: true,
         observation: {
           messageTokens: 12_000,
+          providerOptions: env.modelProviderOptions,
           bufferTokens: 0.2,
           bufferOnIdle: true,
           bufferActivation: 0.8,
@@ -205,6 +207,7 @@ export const financialAgent = new Agent({
         },
         reflection: {
           observationTokens: 36_000,
+          providerOptions: env.modelProviderOptions,
           bufferActivation: 0.5,
           instruction:
             "Consolidate durable personal preferences and goals. Remove financial facts, provider entity IDs, tool names, tool outputs, and implementation details. Keep YNAB authoritative for budgeting and Trading212 authoritative for investments.",

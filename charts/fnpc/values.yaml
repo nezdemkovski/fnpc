@@ -2,7 +2,7 @@ replicaCount: 1
 
 image:
   repository: ghcr.io/nezdemkovski/fnpc
-  tag: "0.3.7"
+  tag: "0.3.8"
   pullPolicy: IfNotPresent
 
 env:
@@ -11,7 +11,8 @@ env:
   mastraHideCloudCta: "true"
   mastraTelemetryDisabled: "1"
   telegramAdapterMode: webhook
-  aiModel: xai/grok-4.5
+  aiModel: xai/grok-4.3
+  xaiReasoningEffort: medium
   ynabPlanId: last-used
   trading212Environment: live
   jwtAuth:

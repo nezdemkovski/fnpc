@@ -39,7 +39,9 @@ preconfigured `MASTRA_JWT_TOKEN` as a token login and stores the authenticated
 session in an HTTP-only cookie.
 
 Model identifiers use Mastra's `provider/model` format. The default is
-`xai/grok-4.5`; set `env.aiModel` to another registered model to override it.
+`xai/grok-4.3`; set `env.aiModel` to another registered model to override it.
+For xAI models, `env.xaiReasoningEffort` controls reasoning and defaults to
+`medium`.
 Application API key names are configured through
 `onepassword.appProperties` and injected from the `fnpc` item.
 
