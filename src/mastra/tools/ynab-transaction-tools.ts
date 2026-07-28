@@ -3,7 +3,11 @@ import { z } from "zod";
 import { getOrCreateProfile } from "../../profile/service";
 import {
   commitPreparedTransaction,
+  commitPreparedTransactionDeletion,
+  commitPreparedTransactionUpdate,
   prepareTransaction,
+  prepareTransactionDeletion,
+  prepareTransactionUpdate,
 } from "../../ynab/transaction-service";
 import { sourceContext } from "./source-context";
 
@@ -84,6 +88,177 @@ export const commitTransactionTool = createTool({
       return { ok: false, missingInputs: ["mastraResourceId"] };
     }
     return commitPreparedTransaction({
+      mastraResourceId,
+      confirmationToken: input.confirmationToken,
+    });
+  },
+});
+
+const updateInputSchema = z
+  .object({
+    transactionId: z.string().min(1),
+    direction: z.enum(["expense", "income"]).optional(),
+    amount: z.number().positive().optional(),
+    accountId: z.string().optional(),
+    accountName: z.string().optional(),
+    categoryId: z.string().optional(),
+    categoryName: z.string().optional(),
+    clearCategory: z.boolean().optional(),
+    payeeName: z.string().trim().min(1).optional(),
+    clearPayee: z.boolean().optional(),
+    date: z.string().optional().describe("YYYY-MM-DD"),
+    memo: z.string().max(500).optional(),
+    clearMemo: z.boolean().optional(),
+    mastraResourceId: z.string().optional(),
+  })
+  .refine(
+    (input) =>
+      input.direction !== undefined ||
+      input.amount !== undefined ||
+      input.accountId !== undefined ||
+      input.accountName !== undefined ||
+      input.categoryId !== undefined ||
+      input.categoryName !== undefined ||
+      input.clearCategory === true ||
+      input.payeeName !== undefined ||
+      input.clearPayee === true ||
+      input.date !== undefined ||
+      input.memo !== undefined ||
+      input.clearMemo === true,
+    { message: "At least one transaction change is required." },
+  );
+
+export const prepareTransactionUpdateTool = createTool({
+  id: "prepare-transaction-update",
+  description:
+    "Prepare changes to one existing YNAB transaction and return an exact before/after preview. This does not write to YNAB. Resolve the transaction ID first.",
+  inputSchema: updateInputSchema,
+  mcp: {
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
+  },
+  execute: async (input, context) => {
+    const source = sourceContext(context);
+    const mastraResourceId =
+      source.mastraResourceId ?? input.mastraResourceId;
+    if (!mastraResourceId) {
+      return { ok: false, missingInputs: ["mastraResourceId"] };
+    }
+    const profile = await getOrCreateProfile(mastraResourceId);
+    if (!profile.timezone) {
+      return { ok: false, missingInputs: ["timezone"] };
+    }
+
+    return prepareTransactionUpdate({
+      mastraResourceId,
+      sourceMessageId: source.sourceMessageId,
+      timezone: profile.timezone,
+      transactionId: input.transactionId,
+      direction: input.direction,
+      amount: input.amount,
+      accountId: input.accountId,
+      accountName: input.accountName,
+      categoryId: input.categoryId,
+      categoryName: input.categoryName,
+      clearCategory: input.clearCategory,
+      payeeName: input.payeeName,
+      clearPayee: input.clearPayee,
+      date: input.date,
+      memo: input.memo,
+      clearMemo: input.clearMemo,
+    });
+  },
+});
+
+export const commitTransactionUpdateTool = createTool({
+  id: "commit-transaction-update",
+  description:
+    "Apply a previously prepared YNAB transaction update only after the user explicitly confirms its exact before/after preview.",
+  inputSchema: z.object({
+    confirmationToken: z.string().min(1),
+    mastraResourceId: z.string().optional(),
+  }),
+  mcp: {
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
+  },
+  execute: async (input, context) => {
+    const source = sourceContext(context);
+    const mastraResourceId =
+      source.mastraResourceId ?? input.mastraResourceId;
+    if (!mastraResourceId) {
+      return { ok: false, missingInputs: ["mastraResourceId"] };
+    }
+    return commitPreparedTransactionUpdate({
+      mastraResourceId,
+      confirmationToken: input.confirmationToken,
+    });
+  },
+});
+
+export const prepareTransactionDeletionTool = createTool({
+  id: "prepare-transaction-deletion",
+  description:
+    "Prepare deletion of one existing YNAB transaction and return the exact transaction preview. This does not delete anything. Resolve the transaction ID first.",
+  inputSchema: z.object({
+    transactionId: z.string().min(1),
+    mastraResourceId: z.string().optional(),
+  }),
+  mcp: {
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
+  },
+  execute: async (input, context) => {
+    const source = sourceContext(context);
+    const mastraResourceId =
+      source.mastraResourceId ?? input.mastraResourceId;
+    if (!mastraResourceId) {
+      return { ok: false, missingInputs: ["mastraResourceId"] };
+    }
+    return prepareTransactionDeletion({
+      mastraResourceId,
+      sourceMessageId: source.sourceMessageId,
+      transactionId: input.transactionId,
+    });
+  },
+});
+
+export const commitTransactionDeletionTool = createTool({
+  id: "commit-transaction-deletion",
+  description:
+    "Delete a previously prepared YNAB transaction only after the user explicitly confirms the exact transaction preview.",
+  inputSchema: z.object({
+    confirmationToken: z.string().min(1),
+    mastraResourceId: z.string().optional(),
+  }),
+  mcp: {
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
+  },
+  execute: async (input, context) => {
+    const source = sourceContext(context);
+    const mastraResourceId =
+      source.mastraResourceId ?? input.mastraResourceId;
+    if (!mastraResourceId) {
+      return { ok: false, missingInputs: ["mastraResourceId"] };
+    }
+    return commitPreparedTransactionDeletion({
       mastraResourceId,
       confirmationToken: input.confirmationToken,
     });

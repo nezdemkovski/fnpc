@@ -4,7 +4,11 @@ import { mutationAudit } from "../db/schema";
 import type { YnabGateway } from "./gateway";
 import {
   commitPreparedTransaction,
+  commitPreparedTransactionDeletion,
+  commitPreparedTransactionUpdate,
   prepareTransaction,
+  prepareTransactionDeletion,
+  prepareTransactionUpdate,
 } from "./transaction-service";
 
 type MutationAudit = typeof mutationAudit.$inferSelect;
@@ -46,6 +50,25 @@ const currency = {
   display_symbol: true,
 };
 
+const existingTransaction = {
+  id: "ynab-transaction-1",
+  date: "2026-07-15",
+  amount: -12_340,
+  memo: "Imported memo",
+  cleared: "uncleared" as const,
+  approved: false,
+  flag_color: null,
+  account_id: account.id,
+  payee_id: "payee-1",
+  category_id: category.id,
+  import_id: "YNAB:-12340:2026-07-15:1",
+  deleted: false,
+  account_name: account.name,
+  payee_name: "Market",
+  category_name: "Needs / Groceries",
+  subtransactions: [],
+};
+
 const endpointReads = {
   getAccounts: async () => ({
     data: { accounts: [account], server_knowledge: 1 },
@@ -73,6 +96,9 @@ const endpointReads = {
   }),
   getAccount: async () => ({ data: { account } }),
   getMonthCategory: async () => ({ data: { category } }),
+  getTransaction: async () => ({
+    data: { transaction: existingTransaction, server_knowledge: 1 },
+  }),
 };
 
 class FakeDatabase {
@@ -161,7 +187,10 @@ describe("guarded YNAB transaction writes", () => {
     );
     expect(prepared.ok).toBe(true);
     if (!prepared.ok || !prepared.confirmationToken) throw new Error("not prepared");
-    expect(database.records[0]?.request.amountMilliunits).toBe(-12_340);
+    expect(database.records[0]?.request).toMatchObject({
+      kind: "create",
+      amountMilliunits: -12_340,
+    });
     expect(database.records[0]?.safeSummary).toMatchObject({
       accountName: "Checking",
       categoryName: "Needs / Groceries",
@@ -232,5 +261,253 @@ describe("guarded YNAB transaction writes", () => {
       error: "expense_category_not_found_or_ambiguous",
     });
     expect(database.records).toHaveLength(0);
+  });
+
+  test("previews payee and memo removal before updating exactly once", async () => {
+    const database = new FakeDatabase();
+    const updates: Array<{
+      transactionId: string;
+      transaction: Record<string, unknown>;
+    }> = [];
+    const gateway = {
+      ...endpointReads,
+      updateTransaction: async (
+        transactionId: string,
+        transaction: Record<string, unknown>,
+      ) => {
+        updates.push({ transactionId, transaction });
+        return {
+          data: {
+            transaction: {
+              ...existingTransaction,
+              payee_id: undefined,
+              payee_name: null,
+              memo: undefined,
+            },
+            server_knowledge: 2,
+          },
+        };
+      },
+    };
+    const now = new Date("2026-07-16T12:00:00.000Z");
+
+    const prepared = await prepareTransactionUpdate(
+      {
+        mastraResourceId: "telegram:user-1",
+        sourceMessageId: "message-update-1",
+        timezone: "Europe/Prague",
+        transactionId: existingTransaction.id,
+        clearPayee: true,
+        clearMemo: true,
+      },
+      {
+        database: database as unknown as Database,
+        gateway: gateway as unknown as YnabGateway,
+        now,
+      },
+    );
+
+    expect(prepared).toMatchObject({
+      ok: true,
+      requiresConfirmation: true,
+      summary: {
+        action: "update_transaction",
+        transactionId: existingTransaction.id,
+        changes: ["payee", "memo"],
+        before: {
+          payeeName: "Market",
+          memo: "Imported memo",
+          amount: "€12.34",
+        },
+        after: {
+          amount: "€12.34",
+        },
+      },
+    });
+    expect(updates).toHaveLength(0);
+    if (!prepared.ok || !prepared.confirmationToken) {
+      throw new Error("update was not prepared");
+    }
+
+    const committed = await commitPreparedTransactionUpdate(
+      {
+        mastraResourceId: "telegram:user-1",
+        confirmationToken: prepared.confirmationToken,
+      },
+      {
+        database: database as unknown as Database,
+        gateway: gateway as unknown as YnabGateway,
+        now,
+      },
+    );
+
+    expect(committed).toMatchObject({
+      ok: true,
+      alreadyCommitted: false,
+      ynabTransactionId: existingTransaction.id,
+    });
+    expect(updates).toEqual([
+      {
+        transactionId: existingTransaction.id,
+        transaction: expect.objectContaining({
+          account_id: account.id,
+          category_id: category.id,
+          payee_id: null,
+          payee_name: null,
+          memo: null,
+          amount: -12_340,
+          approved: false,
+        }),
+      },
+    ]);
+
+    const repeated = await commitPreparedTransactionUpdate(
+      {
+        mastraResourceId: "telegram:user-1",
+        confirmationToken: prepared.confirmationToken,
+      },
+      {
+        database: database as unknown as Database,
+        gateway: gateway as unknown as YnabGateway,
+        now,
+      },
+    );
+    expect(repeated).toMatchObject({ ok: true, alreadyCommitted: true });
+    expect(updates).toHaveLength(1);
+  });
+
+  test("previews a deletion before deleting exactly once", async () => {
+    const database = new FakeDatabase();
+    const deletions: string[] = [];
+    const gateway = {
+      ...endpointReads,
+      deleteTransaction: async (transactionId: string) => {
+        deletions.push(transactionId);
+        return {
+          data: {
+            transaction: { ...existingTransaction, deleted: true },
+            server_knowledge: 2,
+          },
+        };
+      },
+    };
+    const now = new Date("2026-07-16T12:00:00.000Z");
+
+    const prepared = await prepareTransactionDeletion(
+      {
+        mastraResourceId: "telegram:user-1",
+        sourceMessageId: "message-delete-1",
+        transactionId: existingTransaction.id,
+      },
+      {
+        database: database as unknown as Database,
+        gateway: gateway as unknown as YnabGateway,
+        now,
+      },
+    );
+
+    expect(prepared).toMatchObject({
+      ok: true,
+      requiresConfirmation: true,
+      summary: {
+        action: "delete_transaction",
+        transactionId: existingTransaction.id,
+        transaction: {
+          accountName: "Checking",
+          payeeName: "Market",
+          memo: "Imported memo",
+          amount: "€12.34",
+        },
+      },
+    });
+    expect(deletions).toHaveLength(0);
+    if (!prepared.ok || !prepared.confirmationToken) {
+      throw new Error("deletion was not prepared");
+    }
+
+    const committed = await commitPreparedTransactionDeletion(
+      {
+        mastraResourceId: "telegram:user-1",
+        confirmationToken: prepared.confirmationToken,
+      },
+      {
+        database: database as unknown as Database,
+        gateway: gateway as unknown as YnabGateway,
+        now,
+      },
+    );
+    expect(committed).toMatchObject({
+      ok: true,
+      alreadyCommitted: false,
+      ynabTransactionId: existingTransaction.id,
+    });
+    expect(deletions).toEqual([existingTransaction.id]);
+
+    const repeated = await commitPreparedTransactionDeletion(
+      {
+        mastraResourceId: "telegram:user-1",
+        confirmationToken: prepared.confirmationToken,
+      },
+      {
+        database: database as unknown as Database,
+        gateway: gateway as unknown as YnabGateway,
+        now,
+      },
+    );
+    expect(repeated).toMatchObject({ ok: true, alreadyCommitted: true });
+    expect(deletions).toHaveLength(1);
+  });
+
+  test("does not update when YNAB changed after the preview", async () => {
+    const database = new FakeDatabase();
+    let current = existingTransaction;
+    let updateCalls = 0;
+    const gateway = {
+      ...endpointReads,
+      getTransaction: async () => ({
+        data: { transaction: current, server_knowledge: 1 },
+      }),
+      updateTransaction: async () => {
+        updateCalls += 1;
+        throw new Error("must not be called");
+      },
+    };
+    const now = new Date("2026-07-16T12:00:00.000Z");
+    const prepared = await prepareTransactionUpdate(
+      {
+        mastraResourceId: "telegram:user-1",
+        sourceMessageId: "message-update-stale",
+        timezone: "Europe/Prague",
+        transactionId: existingTransaction.id,
+        clearMemo: true,
+      },
+      {
+        database: database as unknown as Database,
+        gateway: gateway as unknown as YnabGateway,
+        now,
+      },
+    );
+    if (!prepared.ok || !prepared.confirmationToken) {
+      throw new Error("update was not prepared");
+    }
+    current = { ...existingTransaction, amount: -15_000 };
+
+    const committed = await commitPreparedTransactionUpdate(
+      {
+        mastraResourceId: "telegram:user-1",
+        confirmationToken: prepared.confirmationToken,
+      },
+      {
+        database: database as unknown as Database,
+        gateway: gateway as unknown as YnabGateway,
+        now,
+      },
+    );
+
+    expect(committed).toEqual({
+      ok: false,
+      error: "ynab_transaction_changed",
+    });
+    expect(updateCalls).toBe(0);
   });
 });

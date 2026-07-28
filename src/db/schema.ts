@@ -9,7 +9,8 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-export type PendingTransactionRequest = {
+export type PendingCreateTransactionRequest = {
+  kind?: "create";
   accountId: string;
   categoryId?: string;
   payeeName: string;
@@ -19,14 +20,60 @@ export type PendingTransactionRequest = {
   importId: string;
 };
 
-export type MutationSummary = {
+export type TransactionSummary = {
+  transactionId?: string;
   accountName: string;
   categoryName?: string;
-  payeeName: string;
+  payeeName?: string;
+  memo?: string;
   date: string;
   amount: string;
   direction: "expense" | "income";
 };
+
+export type PendingUpdateTransactionRequest = {
+  kind: "update";
+  transactionId: string;
+  originalFingerprint: string;
+  transaction: {
+    accountId: string;
+    categoryId?: string | null;
+    payeeId?: string | null;
+    payeeName?: string | null;
+    date: string;
+    amountMilliunits: number;
+    memo?: string | null;
+    cleared: "cleared" | "uncleared" | "reconciled";
+    approved: boolean;
+    flagColor?: "red" | "orange" | "yellow" | "green" | "blue" | "purple" | null;
+  };
+};
+
+export type PendingDeleteTransactionRequest = {
+  kind: "delete";
+  transactionId: string;
+  originalFingerprint: string;
+};
+
+export type PendingTransactionRequest =
+  | PendingCreateTransactionRequest
+  | PendingUpdateTransactionRequest
+  | PendingDeleteTransactionRequest;
+
+export type MutationSummary =
+  | TransactionSummary
+  | {
+      action: "update_transaction";
+      transactionId: string;
+      before: TransactionSummary;
+      after: TransactionSummary;
+      changes: string[];
+    }
+  | {
+      action: "delete_transaction";
+      transactionId: string;
+      transaction: TransactionSummary;
+    };
 
 export const mutationStatusEnum = pgEnum("fnpc_mutation_status", [
   "pending",

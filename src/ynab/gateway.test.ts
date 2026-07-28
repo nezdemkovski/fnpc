@@ -70,6 +70,74 @@ describe("YnabGateway endpoint mapping", () => {
     ]);
   });
 
+  test("maps guarded updates and deletions to the matching transaction endpoints", async () => {
+    const calls: Array<{ endpoint: string; args: unknown[] }> = [];
+    const client = {
+      plans: {},
+      accounts: {},
+      categories: {},
+      months: {},
+      payees: {},
+      scheduledTransactions: {},
+      transactions: {
+        updateTransaction: async (...args: unknown[]) => {
+          calls.push({ endpoint: "updateTransaction", args });
+          return {
+            data: {
+              transaction: { id: "transaction-1" },
+              server_knowledge: 2,
+            },
+          };
+        },
+        deleteTransaction: async (...args: unknown[]) => {
+          calls.push({ endpoint: "deleteTransaction", args });
+          return {
+            data: {
+              transaction: { id: "transaction-1", deleted: true },
+              server_knowledge: 3,
+            },
+          };
+        },
+      },
+    };
+    const gateway = new YnabGateway({
+      planId: "plan-1",
+      client: client as never,
+    });
+
+    await gateway.updateTransaction("transaction-1", {
+      account_id: "account-1",
+      amount: -12_340,
+      payee_id: null,
+      payee_name: null,
+      memo: null,
+    });
+    await gateway.deleteTransaction("transaction-1");
+
+    expect(calls).toEqual([
+      {
+        endpoint: "updateTransaction",
+        args: [
+          "plan-1",
+          "transaction-1",
+          {
+            transaction: {
+              account_id: "account-1",
+              amount: -12_340,
+              payee_id: null,
+              payee_name: null,
+              memo: null,
+            },
+          },
+        ],
+      },
+      {
+        endpoint: "deleteTransaction",
+        args: ["plan-1", "transaction-1"],
+      },
+    ]);
+  });
+
   test("maps SDK failures without exposing response bodies or credentials", () => {
     const error = toYnabGatewayError(
       new ResponseError(

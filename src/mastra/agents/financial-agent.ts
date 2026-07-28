@@ -38,8 +38,12 @@ import {
   listTransactionsTool,
 } from "../tools/ynab";
 import {
+  commitTransactionDeletionTool,
   commitTransactionTool,
+  commitTransactionUpdateTool,
+  prepareTransactionDeletionTool,
   prepareTransactionTool,
+  prepareTransactionUpdateTool,
 } from "../tools/ynab-transaction-tools";
 
 const instructions = `
@@ -86,12 +90,13 @@ YNAB semantics:
 - Do not double-count a target and a scheduled transaction as separate obligations without explaining why.
 - Do not forecast beyond what returned categories, targets, transactions, and schedules support.
 
-Transaction writes are a guarded workflow rather than a raw provider tool:
-1. Use prepareTransactionTool only after account, category, payee, amount, direction, and date are known.
-2. Show the exact returned summary and ask for explicit confirmation.
-3. Never call commitTransactionTool in the same assistant turn as prepareTransactionTool.
-4. On explicit confirmation, pass the returned token to commitTransactionTool.
-5. Transactions are created unapproved so YNAB remains the final review surface.
+Transaction writes are guarded workflows rather than raw provider tools:
+- Create: use prepareTransactionTool only after account, category, payee, amount, direction, and date are known. Show its exact summary and ask for explicit confirmation. Only after a later user message confirms that preview, call commitTransactionTool with its token. New transactions remain unapproved in YNAB.
+- Update: resolve the exact transaction ID, then use prepareTransactionUpdateTool with only the requested changes. Show the returned before/after preview and ask for explicit confirmation. Only after a later user message confirms that preview, call commitTransactionUpdateTool with its token.
+- Delete: resolve the exact transaction ID, then use prepareTransactionDeletionTool. Show the returned transaction preview and ask for explicit confirmation. Only after a later user message confirms that preview, call commitTransactionDeletionTool with its token.
+- Never call a commit tool in the same assistant turn as its prepare tool. The original request to create, update, or delete is not confirmation.
+- If multiple mutations are prepared together, each preview must be shown. Commit them together only when the user's later confirmation explicitly covers every preview.
+- Prefer a true update over delete-and-recreate when the user wants to change an existing transaction.
 
 For onboarding, ask only for missing language and timezone, then save them with updateProfileTool.
 Answer in the user's language. Keep answers direct and explain calculations without motivational filler.
@@ -154,6 +159,10 @@ export const financialAgent = new Agent({
     getTransactionTool,
     prepareTransactionTool,
     commitTransactionTool,
+    prepareTransactionUpdateTool,
+    commitTransactionUpdateTool,
+    prepareTransactionDeletionTool,
+    commitTransactionDeletionTool,
     updateProfileTool,
     webSearchTool,
     getTrading212PortfolioReportTool,

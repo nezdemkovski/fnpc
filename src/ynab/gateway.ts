@@ -57,6 +57,16 @@ export type TransactionQuery = {
   type?: ynab.GetTransactionsTypeEnum;
 };
 
+export type YnabTransactionUpdate = Omit<
+  ynab.ExistingTransaction,
+  "category_id" | "payee_id" | "payee_name" | "memo"
+> & {
+  category_id?: string | null;
+  payee_id?: string | null;
+  payee_name?: string | null;
+  memo?: string | null;
+};
+
 export class YnabGateway {
   private client?: YnabClient;
 
@@ -230,6 +240,25 @@ export class YnabGateway {
     const { client, planId } = this.configuration();
     return this.request(() =>
       client.transactions.createTransaction(planId, { transaction }),
+    );
+  }
+
+  async updateTransaction(
+    transactionId: string,
+    transaction: YnabTransactionUpdate,
+  ) {
+    const { client, planId } = this.configuration();
+    return this.request(() =>
+      client.transactions.updateTransaction(planId, transactionId, {
+        transaction: transaction as ynab.ExistingTransaction,
+      }),
+    );
+  }
+
+  async deleteTransaction(transactionId: string) {
+    const { client, planId } = this.configuration();
+    return this.request(() =>
+      client.transactions.deleteTransaction(planId, transactionId),
     );
   }
 }
